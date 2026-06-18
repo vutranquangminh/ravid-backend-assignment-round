@@ -62,7 +62,7 @@ components:
           type: string
         token:
           type: string
-          description: JWT access token to be sent as `Authorization: Bearer <token>`.
+          description: "JWT access token to be sent as `Authorization: Bearer <token>`."
       required: [message, token]
     UploadDocumentResponse:
       type: object
