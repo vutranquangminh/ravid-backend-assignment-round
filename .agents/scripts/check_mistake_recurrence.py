@@ -24,6 +24,7 @@ Exit codes:
 Pure stdlib. Robust to being run from the repo root; tolerant of a missing
 MISTAKE.md (treated as exit 1 with a clear message rather than a traceback).
 """
+
 from __future__ import annotations
 
 import re
@@ -52,12 +53,29 @@ SKIP_DIR_NAMES = {
     ".vscode",
 }
 TEXT_SUFFIXES = {
-    ".py", ".md", ".txt", ".yaml", ".yml", ".toml", ".ini", ".cfg",
-    ".json", ".env", ".example", ".sh", ".conf", "",
+    ".py",
+    ".md",
+    ".txt",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".json",
+    ".env",
+    ".example",
+    ".sh",
+    ".conf",
+    "",
 }
 TEXT_FILENAMES = {
-    "Dockerfile", "Makefile", ".env", ".env.example", ".gitignore",
-    "docker-compose.yml", "docker-compose.yaml",
+    "Dockerfile",
+    "Makefile",
+    ".env",
+    ".env.example",
+    ".gitignore",
+    "docker-compose.yml",
+    "docker-compose.yaml",
 }
 MAX_BYTES = 2_000_000
 

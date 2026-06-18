@@ -11,6 +11,7 @@ script targets the FOUNDATION inventory, which exists on every branch, so it is
 safe to run as a hard gate (unlike the coverage marker check, which depends on
 product code that lands in later slices).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -111,10 +112,7 @@ def main() -> int:
         print("Missing required agent/docs files:")
         for item in missing:
             print(f"- {item}")
-        print(
-            "\nThe foundation inventory is incomplete. Create the files above "
-            "before continuing."
-        )
+        print("\nThe foundation inventory is incomplete. Create the files above before continuing.")
         return 1
 
     # 2) Cross-reference checks. The resume protocol may be split across the root

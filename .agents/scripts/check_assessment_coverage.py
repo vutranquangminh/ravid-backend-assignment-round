@@ -15,6 +15,7 @@ script exits 0. Pass `--strict` (e.g. on the final delivery branch / in CI on
 
 Pure stdlib. Tolerant of files that do not exist yet.
 """
+
 from __future__ import annotations
 
 import sys
