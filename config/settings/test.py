@@ -38,6 +38,12 @@ CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 
 # ---------------------------------------------------------------------------
+# Media: temp directory so uploads don't pollute the repo
+# ---------------------------------------------------------------------------
+
+MEDIA_ROOT = tempfile.mkdtemp(prefix="ravid_test_media_")
+
+# ---------------------------------------------------------------------------
 # Chroma: temp directory (path only — do NOT import chromadb here)
 # ---------------------------------------------------------------------------
 
