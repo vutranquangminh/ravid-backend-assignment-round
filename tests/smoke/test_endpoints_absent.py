@@ -1,13 +1,13 @@
 """Regression: future endpoints are NOT yet routed.
 
 Paths still absent (introduced in later slices):
-  /api/documents/upload/   -> slice 03 (documents)
-  /api/documents/status/   -> slice 03/04 (documents/rag)
+  /api/documents/status/   -> slice 04 (rag ingestion)
   /api/chat/query/         -> slice 05 (rag)
 
 Paths removed from this list when their slice landed:
-  /api/register/  — slice 02 ✓
-  /api/login/     — slice 02 ✓
+  /api/register/           — slice 02 ✓
+  /api/login/              — slice 02 ✓
+  /api/documents/upload/   — slice 03 ✓
 
 Until those slices land, a request to any of these paths MUST return 404.
 Remove the corresponding path from this list once the slice wires up its
@@ -18,7 +18,6 @@ import pytest
 from django.test import Client
 
 ABSENT_PATHS = [
-    "/api/documents/upload/",
     "/api/documents/status/",
     "/api/chat/query/",
 ]
