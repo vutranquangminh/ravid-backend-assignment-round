@@ -4,6 +4,7 @@ All secrets and connection strings are read from environment variables via
 apps.common.env helpers — never hard-coded (spec requirement D-027).
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 from apps.common.env import env, env_bool, env_int, env_list
@@ -137,6 +138,17 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
+    "EXCEPTION_HANDLER": "apps.common.exceptions.error_envelope_handler",
+}
+
+# ---------------------------------------------------------------------------
+# SimpleJWT
+# ---------------------------------------------------------------------------
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env_int("ACCESS_TOKEN_MINUTES", default=60)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # ---------------------------------------------------------------------------
