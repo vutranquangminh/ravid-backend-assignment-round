@@ -18,6 +18,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.rag.models import IngestionJob
 from apps.rag.tasks import ingest_document
 
 from .models import Document
@@ -46,7 +47,24 @@ class UploadView(APIView):
 
         uploaded_file = serializer.validated_data["file"]
         doc = create_document(owner=request.user, uploaded_file=uploaded_file)
-        result = ingest_document.delay(doc.id)
+
+        # Create the IngestionJob row first (PENDING, no celery_task_id yet).
+        # This avoids the eager-mode chicken-and-egg: if CELERY_TASK_ALWAYS_EAGER
+        # is True, .delay() runs the task synchronously and the task needs the
+        # job.pk to load the row.  Creating the row first gives the task a valid pk.
+        job = IngestionJob.objects.create(
+            owner=request.user,
+            source_document=doc,
+            status=IngestionJob.Status.PENDING,
+        )
+
+        # Dispatch the task (may run eagerly / synchronously in tests).
+        result = ingest_document.delay(job.pk)
+
+        # Record the Celery task id back onto the job row.
+        # In eager mode the task already ran, but the row is still there —
+        # the status has been updated by the task; only celery_task_id is missing.
+        IngestionJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
 
         return Response(
             {
@@ -74,12 +92,27 @@ class DocumentDeleteView(APIView):
 
     Returns ``204 No Content`` on success.
     Cross-user or missing pk → 404 (D-020).
+    Also removes all vectors for the document from the owner's Chroma
+    collection (slice 04 delete integration).
     """
 
     permission_classes = [IsAuthenticated]
 
     def delete(self, request: Request, pk: int) -> Response:
         doc = get_object_or_404(Document, pk=pk, owner=request.user)
+
+        # Remove vectors from Chroma before deleting the DB row.
+        try:
+            from apps.rag import vectorstore  # noqa: PLC0415
+
+            vectorstore.delete_document_vectors(
+                owner_id=request.user.pk,
+                document_id=pk,
+            )
+        except Exception:  # noqa: BLE001
+            # Vector deletion is best-effort; don't block the HTTP response.
+            pass
+
         doc.file.delete(save=False)
         doc.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

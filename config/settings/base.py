@@ -176,16 +176,24 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 
 # ---------------------------------------------------------------------------
-# Chroma (placeholder — actual client initialised in rag app)
+# Chroma (vector store for RAG — slice 04)
 # ---------------------------------------------------------------------------
 
-CHROMA_PERSIST_DIR = env("CHROMA_PERSIST_DIR", default=str(BASE_DIR / ".chroma"))
+CHROMA_PERSIST_DIR = env("CHROMA_PERSIST_DIR", default=str(BASE_DIR / "chroma_data"))
 
 # ---------------------------------------------------------------------------
-# Embedding model (placeholder — used in rag slice)
+# Embedding model (local HuggingFace — D-010)
 # ---------------------------------------------------------------------------
 
-EMBEDDING_MODEL_NAME = env("EMBEDDING_MODEL_NAME", default="all-MiniLM-L6-v2")
+EMBEDDING_MODEL = env("EMBEDDING_MODEL", default="sentence-transformers/all-MiniLM-L6-v2")
+
+# ---------------------------------------------------------------------------
+# RAG pipeline parameters (D-011, D-012)
+# ---------------------------------------------------------------------------
+
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 150
+RETRIEVAL_TOP_K = 4
 
 # ---------------------------------------------------------------------------
 # OpenRouter (placeholder — used in rag slice)
