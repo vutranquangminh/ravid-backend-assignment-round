@@ -131,14 +131,17 @@ class TestUploadHappyPath:
         response = _upload(client, token, "file.pdf", _PDF_BYTES, "application/octet-stream")
         assert response.status_code == 202
 
-    def test_ingestion_task_runs_and_sets_processing(self) -> None:
-        """In eager mode the task runs inline; status should be PROCESSING."""
+    def test_ingestion_task_runs_and_advances_status(self) -> None:
+        """In eager mode the task runs inline; status should advance past UPLOADED."""
         token = _get_token("task_user@example.com", "strongpass1")
         client = Client()
-        response = _upload(client, token, "eager.pdf", _PDF_BYTES, "application/pdf")
+        # Use a TXT file so the pipeline can extract text and succeed.
+        response = _upload(client, token, "eager.txt", _TXT_BYTES, "text/plain")
         assert response.status_code == 202
         doc = Document.objects.get(pk=response.json()["document_id"])
-        assert doc.status == "PROCESSING"
+        # In eager mode the full pipeline runs synchronously: SUCCESS or FAILURE,
+        # but never still UPLOADED (the task always advances the status).
+        assert doc.status != "UPLOADED", f"Expected status to advance, got {doc.status!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -342,10 +345,13 @@ class TestEndpointPresence:
         assert resp.status_code != 404, "Upload endpoint should be routed"
         assert resp.status_code == 401
 
-    def test_status_endpoint_still_absent(self) -> None:
+    def test_status_endpoint_now_present(self) -> None:
+        """GET /api/documents/status/ must NOT return 404 (slice 04 landed)."""
         client = Client()
         resp = client.get("/api/documents/status/")
-        assert resp.status_code == 404
+        # Without a JWT we expect 401, not 404.
+        assert resp.status_code != 404, "Status endpoint should be routed (slice 04)"
+        assert resp.status_code == 401
 
     def test_chat_query_still_absent(self) -> None:
         client = Client()

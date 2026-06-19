@@ -53,7 +53,8 @@ CHROMA_PERSIST_DIR = tempfile.mkdtemp(prefix="ravid_test_chroma_")
 # Stub seams for embedding and OpenRouter — filled by rag slice
 # ---------------------------------------------------------------------------
 
-EMBEDDING_MODEL_NAME = "stub"
+RAVID_EMBEDDINGS_STUB = True
+EMBEDDING_MODEL = "stub"
 OPENROUTER_API_KEY = "stub-key-not-real"
 OPENROUTER_MODEL = "stub/model"
 
