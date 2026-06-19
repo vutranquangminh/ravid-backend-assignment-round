@@ -1,0 +1,28 @@
+# Tooling configuration for the RAVID backend.
+# NOTE: [build-system] and [project] (runtime/dev dependencies) are added in
+# slice 01 (feature/01-foundation-django-langchain-bootstrap). This file
+# currently holds only tooling config (ruff, commitizen) so the professional
+# commit/lint hooks work from the foundation branch onward.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["apps", "config", "tests", ".agents/scripts"]
+extend-exclude = ["**/migrations/*", ".venv", "openspec", ".claude"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort, UP pyupgrade, B bugbear,
+# C4 comprehensions, SIM simplify, DJ flake8-django
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "DJ"]
+ignore = ["E501"] # line length is handled by the formatter
+
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/*" = ["E", "F", "B"]
+".agents/scripts/*" = ["DJ"] # standalone stdlib scripts, not Django
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "v$version"
+major_version_zero = true
+update_changelog_on_bump = true

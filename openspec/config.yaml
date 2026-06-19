@@ -1,0 +1,67 @@
+schema: spec-driven
+
+# Project context (optional)
+# This is shown to AI when creating artifacts (proposals, designs, tasks).
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+context: |
+  Project: RAVID — a Retrieval-Augmented Generation (RAG) document chatbot backend.
+  Domain: authenticated users upload documents (.pdf/.txt/.md), which are parsed,
+  chunked, embedded, and indexed into a PER-USER vector store; users then chat against
+  ONLY their own documents and receive grounded answers, with LLM token cost metered
+  against a per-user credit balance.
+
+  Tech stack (locked):
+    - Django 5.x + Django REST Framework
+    - djangorestframework-simplejwt (email+password -> JWT)
+    - Celery workers + Redis (broker and result backend)
+    - PostgreSQL (documents, ingestion jobs, credits — DB row is source of truth)
+    - Chroma vector store, ONE collection per user named user_{user_id}
+    - LangChain (document loaders + RecursiveCharacterTextSplitter + retriever)
+    - Local HuggingFace embeddings: all-MiniLM-L6-v2 (384 dims, free, offline, no key)
+    - OpenRouter LLM gateway (OpenAI-compatible chat/completions),
+      model mistralai/mistral-7b-instruct:free (free slugs rotate — verify at impl time)
+    - Observability: structured JSON logs -> Grafana Alloy -> Loki -> Grafana
+    - Delivery: Docker Compose
+
+  Locked decisions (canonical copy: .agents/references/assessment-decisions.md):
+    - Chunking: chunk_size=1000, chunk_overlap=150.
+    - Retrieval: top_k=4, cosine similarity.
+    - tokens_consumed is ALWAYS read from the OpenRouter response 'usage' field, never estimated.
+    - Uploads: allow .pdf .txt .md only, max 10 MB; reject others with HTTP 400.
+    - No-relevant-context guard: if retrieval finds nothing relevant, answer that there
+      isn't enough information in the user's documents (do not hallucinate).
+    - Credit/subscription: per-user credit balance decremented by tokens_consumed.
+    - Never log the OpenRouter/embedding key or raw document text.
+
+  Conventions:
+    - Conventional commits.
+    - Branch-per-feature: each slice = one branch feature/NN-<scope> + one PR into
+      merge-only main. Each slice is also one OpenSpec change under
+      openspec/changes/<NN-name>/ (proposal.md + design.md + tasks.md).
+    - PER-USER ISOLATION is the top invariant: every query is scoped to the authenticated
+      owner's Chroma collection (user_{user_id}); no cross-user vector/chunk reaches a prompt.
+    - Ownership/authz: cross-user access to a document/task/vector returns HTTP 404
+      (NOT 403, to avoid leaking existence). Missing/invalid JWT returns 401.
+    - Error envelope EVERYWHERE: a single-field object {"error": "<message>"}.
+    - Failures (parse/embed/LLM) must surface in BOTH structured logs AND task status —
+      never silently swallowed.
+    - Delivery artifacts per slice live under docs/02-features/<NN-name>/
+      (test_matrix.md, pr-review.md, validation-report.md, pull_request.md);
+      requirements/design/tasks live in the OpenSpec change, not duplicated in docs.
+    - Provider/model details are verified at implementation time, never answered from memory.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+rules:
+  proposal:
+    - State the per-user isolation impact explicitly (collection scoping, 404-not-403).
+    - Reference the relevant locked decisions instead of re-deciding parameter values.
+    - Include a "Non-goals" section.
+  design:
+    - Name the exact owner-scoped boundary (Chroma collection user_{user_id}) for any
+      data-access change.
+    - Specify where failures surface (structured log fields AND task status mapping).
+  tasks:
+    - Break tasks into small, independently verifiable chunks.
+    - Include a task to add/update docs/02-features/<NN-name>/ delivery artifacts.
+    - Include a task to update .agents/MISTAKE.md if the review surfaces a recurring failure.
