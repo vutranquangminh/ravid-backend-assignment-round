@@ -1,16 +1,17 @@
-"""Regression: future endpoints are NOT yet routed (slice 01 foundation).
+"""Regression: future endpoints are NOT yet routed.
 
-These paths are introduced in later slices:
-  /api/register/           -> slice 02 (accounts)
-  /api/login/              -> slice 02 (accounts)
+Paths still absent (introduced in later slices):
   /api/documents/upload/   -> slice 03 (documents)
   /api/documents/status/   -> slice 03/04 (documents/rag)
   /api/chat/query/         -> slice 05 (rag)
 
+Paths removed from this list when their slice landed:
+  /api/register/  — slice 02 ✓
+  /api/login/     — slice 02 ✓
+
 Until those slices land, a request to any of these paths MUST return 404.
-This test will start failing once a slice wires up its routes — at that
-point, remove the corresponding assertion and add proper tests in the new
-slice's test module.
+Remove the corresponding path from this list once the slice wires up its
+routes and adds proper tests in its own test module.
 """
 
 import pytest
@@ -20,8 +21,6 @@ ABSENT_PATHS = [
     "/api/documents/upload/",
     "/api/documents/status/",
     "/api/chat/query/",
-    "/api/register/",
-    "/api/login/",
 ]
 
 
