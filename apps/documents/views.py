@@ -11,7 +11,8 @@ Cross-user or missing document → 404, never 403 (D-020).
 
 from __future__ import annotations
 
-from rest_framework import status
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers, status
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -35,6 +36,62 @@ class UploadView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Upload a document",
+        description=(
+            "Upload a PDF, TXT, or Markdown file. The file is stored and an ingestion "
+            "job is dispatched asynchronously. Returns 202 with the document ID and "
+            "Celery task ID to poll status."
+        ),
+        request={"multipart/form-data": DocumentUploadSerializer},
+        responses={
+            202: OpenApiResponse(
+                response=inline_serializer(
+                    name="UploadSuccessResponse",
+                    fields={
+                        "message": serializers.CharField(),
+                        "document_id": serializers.IntegerField(),
+                        "task_id": serializers.UUIDField(),
+                    },
+                ),
+                description="Document accepted and ingestion started.",
+                examples=[
+                    OpenApiExample(
+                        name="accepted",
+                        value={
+                            "message": "Document uploaded and ingestion started",
+                            "document_id": 1,
+                            "task_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        },
+                        response_only=True,
+                    )
+                ],
+            ),
+            400: OpenApiResponse(
+                response=inline_serializer(
+                    name="UploadErrorResponse",
+                    fields={"error": serializers.CharField()},
+                ),
+                description="Invalid file format or validation failure.",
+                examples=[
+                    OpenApiExample(
+                        name="invalid_format",
+                        value={
+                            "error": "Invalid file format. Only PDF, TXT, and Markdown files are allowed."
+                        },
+                        response_only=True,
+                    )
+                ],
+            ),
+            401: OpenApiResponse(
+                response=inline_serializer(
+                    name="UploadUnauthorizedResponse",
+                    fields={"detail": serializers.CharField()},
+                ),
+                description="Authentication credentials were not provided or are invalid.",
+            ),
+        },
+    )
     def post(self, request: Request) -> Response:
         serializer = DocumentUploadSerializer(data=request.data)
         if not serializer.is_valid():
@@ -81,6 +138,24 @@ class DocumentListView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="List documents",
+        description="Return a list of all documents owned by the authenticated user.",
+        request=None,
+        responses={
+            200: OpenApiResponse(
+                response=DocumentSerializer(many=True),
+                description="List of the caller's documents.",
+            ),
+            401: OpenApiResponse(
+                response=inline_serializer(
+                    name="DocumentListUnauthorizedResponse",
+                    fields={"detail": serializers.CharField()},
+                ),
+                description="Authentication credentials were not provided or are invalid.",
+            ),
+        },
+    )
     def get(self, request: Request) -> Response:
         queryset = Document.objects.filter(owner=request.user)
         serializer = DocumentSerializer(queryset, many=True)
@@ -98,6 +173,31 @@ class DocumentDeleteView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Delete a document",
+        description=(
+            "Delete the caller-owned document by ID. Also removes all associated "
+            "vectors from the vector store. Cross-user or missing ID returns 404."
+        ),
+        request=None,
+        responses={
+            204: OpenApiResponse(description="Document deleted successfully. No content returned."),
+            401: OpenApiResponse(
+                response=inline_serializer(
+                    name="DocumentDeleteUnauthorizedResponse",
+                    fields={"detail": serializers.CharField()},
+                ),
+                description="Authentication credentials were not provided or are invalid.",
+            ),
+            404: OpenApiResponse(
+                response=inline_serializer(
+                    name="DocumentDeleteNotFoundResponse",
+                    fields={"detail": serializers.CharField()},
+                ),
+                description="Document not found or belongs to another user.",
+            ),
+        },
+    )
     def delete(self, request: Request, pk: int) -> Response:
         doc = get_object_or_404(Document, pk=pk, owner=request.user)
 
