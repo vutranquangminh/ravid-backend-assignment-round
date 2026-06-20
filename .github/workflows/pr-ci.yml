@@ -52,10 +52,17 @@ jobs:
   # Job 2: Python tests — install [rag,dev] extras and run full pytest suite
   # ---------------------------------------------------------------------------
   python-tests:
-    name: Python Tests
+    name: Python Tests (${{ matrix.test_scope }})
     needs: repo-checks
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        test_scope:
+          - unit
+          - integration
+          - smoke
 
     steps:
       - name: Check out repository
@@ -76,8 +83,8 @@ jobs:
       - name: Ensure CI scripts are executable
         run: chmod +x scripts/ci/*.sh
 
-      - name: Run full test suite
-        run: PYTHON_BIN=python ./scripts/ci/run_python_tests.sh
+      - name: Run sharded Python tests
+        run: TEST_SCOPE=${{ matrix.test_scope }} PYTHON_BIN=python ./scripts/ci/run_python_tests.sh
 
   # ---------------------------------------------------------------------------
   # Job 3: Container validation — build image, run check + migrate smoke
