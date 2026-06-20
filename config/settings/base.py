@@ -223,7 +223,7 @@ RETRIEVAL_TOP_K = 4
 
 OPENROUTER_API_KEY = env("OPENROUTER_API_KEY", default="")
 OPENROUTER_BASE_URL = env("OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1")
-OPENROUTER_MODEL = env("OPENROUTER_MODEL", default="meta-llama/llama-3.3-70b-instruct:free")
+OPENROUTER_MODEL = env("OPENROUTER_MODEL", default="google/gemma-4-31b-it:free")
 
 # ---------------------------------------------------------------------------
 # Chat credit defaults (slice 05)

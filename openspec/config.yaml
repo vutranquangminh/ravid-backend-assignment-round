@@ -19,7 +19,7 @@ context: |
     - LangChain (document loaders + RecursiveCharacterTextSplitter + retriever)
     - Local HuggingFace embeddings: all-MiniLM-L6-v2 (384 dims, free, offline, no key)
     - OpenRouter LLM gateway (OpenAI-compatible chat/completions),
-      model meta-llama/llama-3.3-70b-instruct:free (free slugs rotate — verify at impl time)
+      model google/gemma-4-31b-it:free (free slugs rotate — verify at impl time)
     - Observability: structured JSON logs -> Grafana Alloy -> Loki -> Grafana
     - Delivery: Docker Compose
 
