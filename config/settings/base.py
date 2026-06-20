@@ -204,6 +204,12 @@ OPENROUTER_BASE_URL = env("OPENROUTER_BASE_URL", default="https://openrouter.ai/
 OPENROUTER_MODEL = env("OPENROUTER_MODEL", default="mistralai/mistral-7b-instruct:free")
 
 # ---------------------------------------------------------------------------
+# Chat credit defaults (slice 05)
+# ---------------------------------------------------------------------------
+
+DEFAULT_CHAT_CREDITS = env_int("DEFAULT_CHAT_CREDITS", default=100000)
+
+# ---------------------------------------------------------------------------
 # Structured JSON logging
 # ---------------------------------------------------------------------------
 

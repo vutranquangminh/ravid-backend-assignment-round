@@ -353,11 +353,14 @@ class TestEndpointPresence:
         assert resp.status_code != 404, "Status endpoint should be routed (slice 04)"
         assert resp.status_code == 401
 
-    def test_chat_query_still_absent(self) -> None:
+    def test_chat_query_now_present(self) -> None:
+        """POST /api/chat/query/ must NOT return 404 now that slice 05 has landed."""
         client = Client()
         resp = client.post(
             "/api/chat/query/",
             data=json.dumps({"query": "hello"}),
             content_type="application/json",
         )
-        assert resp.status_code == 404
+        # Without JWT → 401 (route exists); 404 would mean the route is absent.
+        assert resp.status_code != 404, "Expected /api/chat/query/ to be routed (slice 05)"
+        assert resp.status_code == 401

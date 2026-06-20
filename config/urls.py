@@ -7,10 +7,8 @@ urlpatterns = [
     path("api/health/", include("apps.common.urls")),
     # --- Slice 02: authentication (register / login / JWT) ---
     path("api/", include("apps.accounts.urls")),
-    # --- Slice 04: ingestion status (MUST precede documents/<pk>/ to avoid shadowing) ---
+    # --- Slice 04 + 05: ingestion status + chat query ---
     path("api/", include("apps.rag.urls")),
     # --- Slice 03: document upload / list / delete ---
     path("api/", include("apps.documents.urls")),
-    # --- Reserved for later slices (uncomment as each slice lands) ---
-    # path("api/chat/query/", ...),      # slice 05: chat query
 ]
