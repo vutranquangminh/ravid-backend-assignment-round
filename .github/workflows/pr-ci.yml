@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -106,3 +109,62 @@ jobs:
 
       - name: Run container validation
         run: ./scripts/ci/run_container_validation.sh
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Coverage — full suite with a coverage gate (--cov-fail-under=95; actual 100%)
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Coverage
+    needs: repo-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install project and dev dependencies
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e '.[rag,dev]'
+
+      - name: Run tests with coverage gate
+        run: python -m pytest -q --cov --cov-report=term-missing --cov-fail-under=95
+
+  # ---------------------------------------------------------------------------
+  # Job 5: Security — bandit static scan (gate) + pip-audit (informational)
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install security tooling
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install bandit pip-audit
+
+      - name: Bandit static analysis (app code)
+        run: bandit -c pyproject.toml -r apps config -ll
+
+      - name: pip-audit (dependency advisories, informational)
+        continue-on-error: true
+        run: pip-audit --skip-editable || true

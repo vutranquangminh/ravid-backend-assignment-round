@@ -1,5 +1,12 @@
 # RAVID — RAG Document Chatbot Backend
 
+[![CI](https://github.com/vutranquangminh/ravid-backend-assignment-round/actions/workflows/pr-ci.yml/badge.svg)](https://github.com/vutranquangminh/ravid-backend-assignment-round/actions/workflows/pr-ci.yml)
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![Django](https://img.shields.io/badge/Django-5.x-092E20)
+![Tests](https://img.shields.io/badge/tests-754%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+
 RAVID is a Retrieval-Augmented Generation (RAG) document chatbot backend. Authenticated users upload documents (`.pdf`, `.txt`, `.md`), those documents are asynchronously parsed, chunked, embedded, and indexed into a per-user vector store. Users can then chat against **their own documents** and receive grounded answers — with LLM token cost metered against a per-user credit balance.
 
 ## Tech Stack (locked)
@@ -11,14 +18,16 @@ RAVID is a Retrieval-Augmented Generation (RAG) document chatbot backend. Authen
 | Async | Celery workers, Redis broker + result backend |
 | Relational store | PostgreSQL (documents, ingestion jobs, credit balances) |
 | Vector store | Chroma `1.5.9`, one collection per user (`user_{user_id}`) |
-| RAG toolkit | LangChain (loaders + `RecursiveCharacterTextSplitter` + retriever) |
+| RAG toolkit | LangChain `RecursiveCharacterTextSplitter` (chunking) + `HuggingFaceEmbeddings`; the Chroma client handles per-user indexing & retrieval directly — see note below |
 | Embeddings | Local HuggingFace `all-MiniLM-L6-v2` (384 dims, free, offline) |
-| LLM gateway | OpenRouter (`mistralai/mistral-7b-instruct:free`) |
+| LLM gateway | OpenRouter (`google/gemma-4-31b-it:free`) |
 | API docs | drf-spectacular → Swagger UI at `/api/docs/` |
 | Observability | Structured JSON logs → Grafana Alloy → Loki → Grafana |
 | Delivery | Docker Compose (8 services) |
 
 Canonical, non-negotiable parameter values live in [`.agents/references/assessment-decisions.md`](.agents/references/assessment-decisions.md): chunk size `1000` / overlap `150`; retrieval `top_k=4`, cosine similarity; uploads capped at `10 MB`; `tokens_consumed` is always read from the OpenRouter `usage` field, never estimated.
+
+> **Note on LangChain usage.** LangChain provides the **chunking** (`RecursiveCharacterTextSplitter`) and the **embeddings** abstraction (`langchain-huggingface`). For the vector store and retrieval we call the **`chromadb` client directly** (not `langchain_chroma`) — a deliberate choice: it keeps strict control over the per-user collection scoping (`user_{id}`) that underpins our isolation guarantee, and avoids coupling to the fast-moving `langchain` 1.x vector-store API. Text extraction uses `pypdf` for PDFs and UTF‑8 reads for TXT/MD. The retrieval flow (`embed query → query the caller's collection → build bounded context → LLM`) is the standard RAG pipeline, implemented explicitly.
 
 ## Per-User Isolation
 

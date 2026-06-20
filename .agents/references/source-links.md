@@ -44,7 +44,7 @@ limits) must be verified against these at implementation time — never answered
 - Quickstart / base URL `https://openrouter.ai/api/v1` (OpenAI-compatible, D-007):
   https://openrouter.ai/docs/quickstart
 - API reference — chat completions request/response shape: https://openrouter.ai/docs/api-reference/chat-completion
-- Models catalogue — **verify the free slug `mistralai/mistral-7b-instruct:free` is still live**
+- Models catalogue — **verify the free slug `google/gemma-4-31b-it:free` is still live**
   (D-008): https://openrouter.ai/models
 - Usage accounting (`usage` field for `tokens_consumed`, D-009): https://openrouter.ai/docs/use-cases/usage-accounting
 

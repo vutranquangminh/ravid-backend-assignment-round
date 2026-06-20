@@ -17,7 +17,7 @@ links: `.agents/references/source-links.md`.
 - It is **NOT** the Anthropic Messages API. Do not call `api.anthropic.com`, and do not
   use the Anthropic Messages request shape (`system` top-level + `messages` with
   Anthropic content blocks). If you find an Anthropic-shaped call, it is a bug.
-- Model slugs follow `vendor/model:tier`, e.g. `mistralai/mistral-7b-instruct:free` or
+- Model slugs follow `vendor/model:tier`, e.g. `google/gemma-4-31b-it:free` or
   `anthropic/<model>:free`. Free slugs **rotate and get deprecated** — verify the slug
   is currently live before relying on it.
 - Authentication is via the OpenRouter API key as a bearer token. The key is read from

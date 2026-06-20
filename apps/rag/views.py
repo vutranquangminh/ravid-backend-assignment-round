@@ -22,13 +22,22 @@ from django.db import transaction
 from django.db.models import F, Value
 from django.db.models.functions import Greatest
 from django.http import Http404, StreamingHttpResponse
-from rest_framework import status
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
+from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import IngestionJob, Message
+from .serializers import ChatQuerySerializer as _ChatQuerySerializer
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +72,103 @@ class StatusView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Poll ingestion job status",
+        description=(
+            "Poll the status of a document ingestion job by Celery task ID. "
+            "Returns PROCESSING while pending/started, SUCCESS when complete, "
+            "or FAILURE with an error message if the job failed."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="task_id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="The Celery task ID returned by the upload endpoint.",
+            )
+        ],
+        request=None,
+        responses={
+            200: OpenApiResponse(
+                response=inline_serializer(
+                    name="StatusResponse",
+                    fields={
+                        "task_id": serializers.CharField(),
+                        "status": serializers.ChoiceField(
+                            choices=["PROCESSING", "SUCCESS", "FAILURE"]
+                        ),
+                        "message": serializers.CharField(required=False),
+                        "error": serializers.CharField(required=False),
+                    },
+                ),
+                description="Current ingestion status.",
+                examples=[
+                    OpenApiExample(
+                        name="processing",
+                        value={
+                            "task_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "status": "PROCESSING",
+                        },
+                        response_only=True,
+                    ),
+                    OpenApiExample(
+                        name="success",
+                        value={
+                            "task_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "status": "SUCCESS",
+                            "message": "Document successfully parsed, embedded, and indexed in vector storage.",
+                        },
+                        response_only=True,
+                    ),
+                    OpenApiExample(
+                        name="failure",
+                        value={
+                            "task_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "status": "FAILURE",
+                            "error": "Failed to parse document.",
+                        },
+                        response_only=True,
+                    ),
+                ],
+            ),
+            400: OpenApiResponse(
+                response=inline_serializer(
+                    name="StatusMissingParamResponse",
+                    fields={"error": serializers.CharField()},
+                ),
+                description="Missing required task_id query parameter.",
+                examples=[
+                    OpenApiExample(
+                        name="missing_task_id",
+                        value={"error": "task_id query parameter is required."},
+                        response_only=True,
+                    )
+                ],
+            ),
+            401: OpenApiResponse(
+                response=inline_serializer(
+                    name="StatusUnauthorizedResponse",
+                    fields={"detail": serializers.CharField()},
+                ),
+                description="Authentication credentials were not provided or are invalid.",
+            ),
+            404: OpenApiResponse(
+                response=inline_serializer(
+                    name="StatusNotFoundResponse",
+                    fields={"error": serializers.CharField()},
+                ),
+                description="Task not found or belongs to another user.",
+                examples=[
+                    OpenApiExample(
+                        name="not_found",
+                        value={"error": "Task not found."},
+                        response_only=True,
+                    )
+                ],
+            ),
+        },
+    )
     def get(self, request: Request) -> Response:
         task_id = request.query_params.get("task_id", "").strip()
         if not task_id:
@@ -135,6 +241,70 @@ class ChatQueryView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Chat query (RAG)",
+        description=(
+            "Submit a question to the RAG pipeline. Retrieves relevant chunks from the "
+            "user's document collection, calls the LLM with context, deducts credits, "
+            "and returns the answer. Pass chat_id to continue an existing conversation."
+        ),
+        request=_ChatQuerySerializer,
+        responses={
+            200: OpenApiResponse(
+                response=inline_serializer(
+                    name="ChatQuerySuccessResponse",
+                    fields={
+                        "answer": serializers.CharField(),
+                        "tokens_consumed": serializers.IntegerField(),
+                        "chat_id": serializers.IntegerField(),
+                    },
+                ),
+                description="Answer from the RAG pipeline.",
+                examples=[
+                    OpenApiExample(
+                        name="success",
+                        value={"answer": "The answer is ...", "tokens_consumed": 89, "chat_id": 1},
+                        response_only=True,
+                    )
+                ],
+            ),
+            400: OpenApiResponse(
+                response=inline_serializer(
+                    name="ChatQueryBadRequestResponse",
+                    fields={"error": serializers.CharField()},
+                ),
+                description="Missing or invalid query.",
+                examples=[
+                    OpenApiExample(
+                        name="missing_query",
+                        value={"error": "query is required."},
+                        response_only=True,
+                    )
+                ],
+            ),
+            401: OpenApiResponse(
+                response=inline_serializer(
+                    name="ChatQueryUnauthorizedResponse",
+                    fields={"detail": serializers.CharField()},
+                ),
+                description="Authentication credentials were not provided or are invalid.",
+            ),
+            402: OpenApiResponse(
+                response=inline_serializer(
+                    name="ChatQueryPaymentRequiredResponse",
+                    fields={"error": serializers.CharField()},
+                ),
+                description="Insufficient credits.",
+                examples=[
+                    OpenApiExample(
+                        name="no_credits",
+                        value={"error": "Insufficient credits."},
+                        response_only=True,
+                    )
+                ],
+            ),
+        },
+    )
     def post(self, request: Request) -> Response:
         from apps.accounts.models import CreditAccount, get_or_create_account  # noqa: PLC0415
 
@@ -302,6 +472,66 @@ class ChatStreamView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Chat stream (SSE)",
+        description=(
+            "Submit a question to the RAG pipeline and receive the answer as a "
+            "Server-Sent Events (SSE) stream. Pre-stream checks (auth, validation, "
+            "credit) return standard JSON errors. Once streaming starts, events are:\n\n"
+            '- `data: {"delta": "<text chunk>"}` — one per LLM output chunk\n'
+            '- `data: {"event": "done", "chat_id": <id>, "tokens_consumed": <n>}` — final summary\n'
+            "- `data: [DONE]` — stream terminator\n\n"
+            "Messages are persisted and credits deducted after the stream completes."
+        ),
+        request=_ChatQuerySerializer,
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.STR,
+                description=(
+                    "Server-Sent Events stream (text/event-stream). "
+                    "Each line is `data: <json>\\n\\n`. "
+                    'Delta events: `{"delta": "<chunk>"}`. '
+                    'Final event: `{"event": "done", "chat_id": 1, "tokens_consumed": 89}`. '
+                    "Terminator: `[DONE]`."
+                ),
+            ),
+            400: OpenApiResponse(
+                response=inline_serializer(
+                    name="ChatStreamBadRequestResponse",
+                    fields={"error": serializers.CharField()},
+                ),
+                description="Missing or invalid query.",
+                examples=[
+                    OpenApiExample(
+                        name="missing_query",
+                        value={"error": "query is required."},
+                        response_only=True,
+                    )
+                ],
+            ),
+            401: OpenApiResponse(
+                response=inline_serializer(
+                    name="ChatStreamUnauthorizedResponse",
+                    fields={"detail": serializers.CharField()},
+                ),
+                description="Authentication credentials were not provided or are invalid.",
+            ),
+            402: OpenApiResponse(
+                response=inline_serializer(
+                    name="ChatStreamPaymentRequiredResponse",
+                    fields={"error": serializers.CharField()},
+                ),
+                description="Insufficient credits.",
+                examples=[
+                    OpenApiExample(
+                        name="no_credits",
+                        value={"error": "Insufficient credits."},
+                        response_only=True,
+                    )
+                ],
+            ),
+        },
+    )
     def post(self, request: Request):  # noqa: ANN201
         from apps.accounts.models import get_or_create_account  # noqa: PLC0415
 

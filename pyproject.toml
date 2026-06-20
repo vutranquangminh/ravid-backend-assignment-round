@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ravid-backend"
-version = "0.1.0"
+version = "1.0.0"
 requires-python = ">=3.12"
 dependencies = [
     "django>=5.0,<5.3",
@@ -38,6 +38,9 @@ dev = [
     "pytest-cov",
     "ruff",
     "pre-commit",
+    "bandit",
+    "pip-audit",
+    "respx",
 ]
 
 [tool.setuptools.packages.find]
@@ -70,7 +73,34 @@ ignore = ["E501"] # line length is handled by the formatter
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.0"
+version = "1.0.0"
 tag_format = "v$version"
 major_version_zero = true
 update_changelog_on_bump = true
+
+# ---------------------------------------------------------------------------
+# Coverage (gate enforced in CI: --cov-fail-under=85)
+# ---------------------------------------------------------------------------
+
+[tool.coverage.run]
+source = ["apps", "config"]
+omit = [
+    "*/migrations/*",
+    "*/asgi.py",
+    "*/wsgi.py",
+    "config/settings/local.py",
+    "config/settings/production.py",
+    "manage.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+# ---------------------------------------------------------------------------
+# Bandit (security lint of application code; tests are excluded)
+# ---------------------------------------------------------------------------
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "openspec", ".claude"]
+skips = ["B101"]  # assert_used — fine outside production code

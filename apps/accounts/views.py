@@ -10,7 +10,8 @@ Protected route (IsAuthenticated — default, inherited):
 
 from __future__ import annotations
 
-from rest_framework import status
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -27,6 +28,45 @@ class RegisterView(APIView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Register a new user",
+        description="Create a new user account. Returns 201 with the new user's ID on success.",
+        request=RegisterSerializer,
+        responses={
+            201: OpenApiResponse(
+                response=inline_serializer(
+                    name="RegisterSuccessResponse",
+                    fields={
+                        "message": serializers.CharField(),
+                        "user_id": serializers.IntegerField(),
+                    },
+                ),
+                description="User registered successfully.",
+                examples=[
+                    OpenApiExample(
+                        name="success",
+                        value={"message": "Registration successful", "user_id": 1},
+                        response_only=True,
+                    )
+                ],
+            ),
+            400: OpenApiResponse(
+                response=inline_serializer(
+                    name="RegisterErrorResponse",
+                    fields={"error": serializers.CharField()},
+                ),
+                description="Validation error or duplicate email.",
+                examples=[
+                    OpenApiExample(
+                        name="duplicate_email",
+                        value={"error": "User with this email already exists."},
+                        response_only=True,
+                    )
+                ],
+            ),
+        },
+        auth=[],
+    )
     def post(self, request: Request) -> Response:
         serializer = RegisterSerializer(data=request.data)
         if not serializer.is_valid():
@@ -58,6 +98,45 @@ class LoginView(APIView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Login and obtain a JWT token",
+        description="Authenticate with email and password. Returns a JWT access token on success.",
+        request=LoginSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=inline_serializer(
+                    name="LoginSuccessResponse",
+                    fields={
+                        "message": serializers.CharField(),
+                        "token": serializers.CharField(),
+                    },
+                ),
+                description="Login successful.",
+                examples=[
+                    OpenApiExample(
+                        name="success",
+                        value={"message": "Login successful", "token": "<jwt>"},
+                        response_only=True,
+                    )
+                ],
+            ),
+            401: OpenApiResponse(
+                response=inline_serializer(
+                    name="LoginErrorResponse",
+                    fields={"error": serializers.CharField()},
+                ),
+                description="Invalid credentials.",
+                examples=[
+                    OpenApiExample(
+                        name="invalid_credentials",
+                        value={"error": "Invalid email or password"},
+                        response_only=True,
+                    )
+                ],
+            ),
+        },
+        auth=[],
+    )
     def post(self, request: Request) -> Response:
         serializer = LoginSerializer(data=request.data)
         if not serializer.is_valid():
@@ -91,6 +170,37 @@ class MeView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Get current user info",
+        description="Return the authenticated user's ID and email. Requires a valid JWT Bearer token.",
+        request=None,
+        responses={
+            200: OpenApiResponse(
+                response=inline_serializer(
+                    name="MeResponse",
+                    fields={
+                        "user_id": serializers.IntegerField(),
+                        "email": serializers.EmailField(),
+                    },
+                ),
+                description="Current user info.",
+                examples=[
+                    OpenApiExample(
+                        name="success",
+                        value={"user_id": 1, "email": "a@b.com"},
+                        response_only=True,
+                    )
+                ],
+            ),
+            401: OpenApiResponse(
+                response=inline_serializer(
+                    name="UnauthorizedResponse",
+                    fields={"detail": serializers.CharField()},
+                ),
+                description="Authentication credentials were not provided or are invalid.",
+            ),
+        },
+    )
     def get(self, request: Request) -> Response:
         return Response(
             {"user_id": request.user.pk, "email": request.user.email},

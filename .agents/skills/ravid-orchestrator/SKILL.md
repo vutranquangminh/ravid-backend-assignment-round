@@ -76,7 +76,7 @@ Do not duplicate proposal/design/tasks under `docs/02-features`; those live in t
 
 ### Lock decisions
 
-Lock ambiguous decisions into `.agents/references/assessment-decisions.md` before coding. The canonical locked values already include: OpenRouter base url `https://openrouter.ai/api/v1` with model slug `mistralai/mistral-7b-instruct:free` (verify free slug at impl time), local HuggingFace `all-MiniLM-L6-v2` embeddings (384 dims), `RecursiveCharacterTextSplitter` chunk_size=1000/overlap=150, retrieval top_k=4 cosine, one Chroma collection per user `user_{user_id}`, uploads `.pdf/.txt/.md` max 10 MB, 404-not-403 leak rule, `{"error": "<message>"}` envelope, and per-user credit deduction by `tokens_consumed`.
+Lock ambiguous decisions into `.agents/references/assessment-decisions.md` before coding. The canonical locked values already include: OpenRouter base url `https://openrouter.ai/api/v1` with model slug `google/gemma-4-31b-it:free` (verify free slug at impl time), local HuggingFace `all-MiniLM-L6-v2` embeddings (384 dims), `RecursiveCharacterTextSplitter` chunk_size=1000/overlap=150, retrieval top_k=4 cosine, one Chroma collection per user `user_{user_id}`, uploads `.pdf/.txt/.md` max 10 MB, 404-not-403 leak rule, `{"error": "<message>"}` envelope, and per-user credit deduction by `tokens_consumed`.
 
 ### Hand off
 

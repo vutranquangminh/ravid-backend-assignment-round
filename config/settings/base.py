@@ -19,7 +19,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 # Security
 # ---------------------------------------------------------------------------
 
-SECRET_KEY = env("SECRET_KEY", default="insecure-dev-secret-change-in-production")
+# Accept SECRET_KEY (preferred) or the legacy DJANGO_SECRET_KEY name.
+SECRET_KEY = env("SECRET_KEY") or env(
+    "DJANGO_SECRET_KEY", "insecure-dev-secret-change-in-production"
+)
 
 DEBUG = env_bool("DEBUG", default=False)
 
@@ -220,7 +223,7 @@ RETRIEVAL_TOP_K = 4
 
 OPENROUTER_API_KEY = env("OPENROUTER_API_KEY", default="")
 OPENROUTER_BASE_URL = env("OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1")
-OPENROUTER_MODEL = env("OPENROUTER_MODEL", default="mistralai/mistral-7b-instruct:free")
+OPENROUTER_MODEL = env("OPENROUTER_MODEL", default="google/gemma-4-31b-it:free")
 
 # ---------------------------------------------------------------------------
 # Chat credit defaults (slice 05)

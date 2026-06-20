@@ -27,7 +27,7 @@ Canonical non-infrastructure decisions live in
 
 - Celery broker and result backend
 
-### worker
+### celery
 
 - Celery worker running the ingestion pipeline
   (load -> split -> embed -> Chroma upsert)
@@ -71,7 +71,7 @@ collide with the application or leak to the network.
 Use healthcheck-gated `depends_on` (`condition: service_healthy`):
 
 - `web` depends on `db`, `redis`, and `chroma` being healthy
-- `worker` depends on `db`, `redis`, and `chroma` being healthy
+- `celery` depends on `db`, `redis`, and `chroma` being healthy
 - `grafana` depends on `loki` being available
 
 Provide healthchecks for `db` (e.g. `pg_isready`), `redis` (`redis-cli ping`),
@@ -83,7 +83,7 @@ Named Docker volumes for mutable service data:
 
 - `pgdata` — PostgreSQL data
 - `media` — application file storage (`uploads/user_{user_id}/`), mounted into
-  both `web` and `worker` so the worker can read what `web` stored
+  both `web` and `celery` so the worker can read what `web` stored
 - `chroma_data` — Chroma persistence
 
 Read-only bind mounts from the repo:
@@ -148,7 +148,7 @@ without guessing variable names. `.env.example` must NOT contain a real
 
 ## Container Design Principles
 
-- keep the stack minimal but complete (web, db, redis, worker, chroma, loki,
+- keep the stack minimal but complete (web, db, redis, celery, chroma, loki,
   alloy, grafana)
 - keep reviewer startup commands short
 - prefer named volumes over bind mounts for mutable service data
