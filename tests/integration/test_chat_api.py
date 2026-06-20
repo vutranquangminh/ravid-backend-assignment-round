@@ -149,14 +149,14 @@ class TestChatHappyPath:
         assert body["tokens_consumed"] > 0
 
     def test_response_keys_are_exactly_answer_and_tokens(self) -> None:
-        """Success response must have exactly {answer, tokens_consumed} keys."""
+        """Success response must have {answer, tokens_consumed, chat_id} keys (chat_id additive in s08)."""
         token = _register_and_login("chat_keys@test.com")
         _upload_and_ingest(token, _TXT_GENERIC)
 
         client = Client()
         resp = _chat(client, token, "Any question")
         assert resp.status_code == 200
-        assert set(resp.json().keys()) == {"answer", "tokens_consumed"}
+        assert set(resp.json().keys()) == {"answer", "tokens_consumed", "chat_id"}
 
 
 # ---------------------------------------------------------------------------
@@ -303,12 +303,12 @@ class TestNoContextGuard:
             mock_complete.assert_not_called()
 
     def test_no_context_response_keys(self) -> None:
-        """No-context guard response must have {answer, tokens_consumed}."""
+        """No-context guard response must have {answer, tokens_consumed, chat_id} (chat_id additive in s08)."""
         token = _register_and_login("nocontext_keys@test.com")
         client = Client()
         resp = _chat(client, token, "Anything")
         assert resp.status_code == 200
-        assert set(resp.json().keys()) == {"answer", "tokens_consumed"}
+        assert set(resp.json().keys()) == {"answer", "tokens_consumed", "chat_id"}
 
 
 # ---------------------------------------------------------------------------

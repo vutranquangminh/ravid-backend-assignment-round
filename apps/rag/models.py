@@ -1,4 +1,7 @@
-"""IngestionJob model — tracks async ingestion of a Document into Chroma (slice 04).
+"""Models for the RAG app.
+
+- IngestionJob: tracks async ingestion of a Document into Chroma (slice 04).
+- Conversation + Message: multi-turn chat continuation (slice 08).
 
 The DB row is the source of truth for task status (D-019).  The Celery task
 writes `celery_task_id` back onto the row after dispatch, and the status
@@ -57,3 +60,45 @@ class IngestionJob(models.Model):
             f"IngestionJob({self.pk}, owner={self.owner_id}, "
             f"doc={self.source_document_id}, status={self.status})"
         )
+
+
+class Conversation(models.Model):
+    """Multi-turn chat conversation owned by a single user (slice 08)."""
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="conversations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Conversation({self.pk}, owner={self.owner_id})"
+
+
+class Message(models.Model):
+    """A single turn in a Conversation (user or assistant role) (slice 08)."""
+
+    class Role(models.TextChoices):
+        USER = "user", "User"
+        ASSISTANT = "assistant", "Assistant"
+
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    role = models.CharField(max_length=10, choices=Role.choices)
+    content = models.TextField()
+    tokens = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"Message({self.pk}, role={self.role}, conv={self.conversation_id})"
