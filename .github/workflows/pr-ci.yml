@@ -1,0 +1,101 @@
+name: PR CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Job 1: Repo checks — lint, validate agents, manage.py check, compose config
+  # ---------------------------------------------------------------------------
+  repo-checks:
+    name: Repo Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install project and dev dependencies
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e '.[rag,dev]'
+
+      - name: Ensure CI scripts are executable
+        run: chmod +x scripts/ci/*.sh
+
+      - name: Run repo checks
+        run: PYTHON_BIN=python ./scripts/ci/run_repo_checks.sh
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Python tests — install [rag,dev] extras and run full pytest suite
+  # ---------------------------------------------------------------------------
+  python-tests:
+    name: Python Tests
+    needs: repo-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install project and dev dependencies
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e '.[rag,dev]'
+
+      - name: Ensure CI scripts are executable
+        run: chmod +x scripts/ci/*.sh
+
+      - name: Run full test suite
+        run: PYTHON_BIN=python ./scripts/ci/run_python_tests.sh
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Container validation — build image, run check + migrate smoke
+  # ---------------------------------------------------------------------------
+  container-validation:
+    name: Container Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOCKER_BUILDKIT: "1"
+      COMPOSE_DOCKER_CLI_BUILD: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Ensure CI scripts are executable
+        run: chmod +x scripts/ci/*.sh
+
+      - name: Run container validation
+        run: ./scripts/ci/run_container_validation.sh

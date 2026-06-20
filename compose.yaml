@@ -1,0 +1,181 @@
+# RAVID Docker Compose stack — reviewer entrypoint.
+#
+# Quick start:
+#   cp .env.example .env        # then set OPENROUTER_API_KEY
+#   docker compose up --build
+#
+# Services: web, celery, db (postgres:16), redis (redis:7),
+#           chroma (chromadb/chroma:1.5.9), loki, alloy, grafana
+#
+# Chroma image tag 1.5.9 matches the pinned chromadb Python client version
+# installed via pyproject.toml[rag].  If the client is upgraded, update this tag.
+
+name: ravid
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — relational source of truth
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ravid}
+      POSTGRES_USER: ${POSTGRES_USER:-ravid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ravid}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ravid} -d ${POSTGRES_DB:-ravid}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    ports:
+      - "127.0.0.1:${POSTGRES_PUBLISHED_PORT:-5432}:5432"
+
+  # ---------------------------------------------------------------------------
+  # Redis — Celery broker + result backend
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 3s
+    ports:
+      - "127.0.0.1:${REDIS_PUBLISHED_PORT:-6379}:6379"
+
+  # ---------------------------------------------------------------------------
+  # Chroma — per-user vector store (HttpClient mode in production)
+  # Image tag is pinned to match chromadb==1.5.9 (see pyproject.toml[rag]).
+  # ---------------------------------------------------------------------------
+  chroma:
+    image: chromadb/chroma:1.5.9
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8000/api/v1/heartbeat || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      - "127.0.0.1:8001:8000"
+
+  # ---------------------------------------------------------------------------
+  # Django web (gunicorn)
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: docker/django/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+    volumes:
+      - media:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8000/api/health/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Celery worker — reuses the same image as web
+  # ---------------------------------------------------------------------------
+  celery:
+    build:
+      context: .
+      dockerfile: docker/django/Dockerfile
+    entrypoint: []
+    command: ["celery", "-A", "config", "worker", "--loglevel=info"]
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+    volumes:
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Loki — log aggregation (single-binary, filesystem)
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.2.1
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./docker/loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+
+  # ---------------------------------------------------------------------------
+  # Grafana Alloy — log collection agent (Docker socket → Loki)
+  # ---------------------------------------------------------------------------
+  alloy:
+    image: grafana/alloy:v1.8.2
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./docker/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:12345:12345"
+    depends_on:
+      - web
+      - celery
+      - loki
+
+  # ---------------------------------------------------------------------------
+  # Grafana — dashboards (provisioned, no manual setup needed)
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    depends_on:
+      loki:
+        condition: service_started
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+volumes:
+  pg_data:
+  media:
+  chroma_data:
+  loki_data:
+  grafana_data:
