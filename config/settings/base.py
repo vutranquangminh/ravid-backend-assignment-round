@@ -19,7 +19,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 # Security
 # ---------------------------------------------------------------------------
 
-SECRET_KEY = env("SECRET_KEY", default="insecure-dev-secret-change-in-production")
+# Accept SECRET_KEY (preferred) or the legacy DJANGO_SECRET_KEY name.
+SECRET_KEY = env("SECRET_KEY") or env(
+    "DJANGO_SECRET_KEY", "insecure-dev-secret-change-in-production"
+)
 
 DEBUG = env_bool("DEBUG", default=False)
 
