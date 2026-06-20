@@ -3,8 +3,8 @@
 [![CI](https://github.com/vutranquangminh/ravid-backend-assignment-round/actions/workflows/pr-ci.yml/badge.svg)](https://github.com/vutranquangminh/ravid-backend-assignment-round/actions/workflows/pr-ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Django](https://img.shields.io/badge/Django-5.x-092E20)
-![Tests](https://img.shields.io/badge/tests-713%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-~92%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-754%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 RAVID is a Retrieval-Augmented Generation (RAG) document chatbot backend. Authenticated users upload documents (`.pdf`, `.txt`, `.md`), those documents are asynchronously parsed, chunked, embedded, and indexed into a per-user vector store. Users can then chat against **their own documents** and receive grounded answers — with LLM token cost metered against a per-user credit balance.

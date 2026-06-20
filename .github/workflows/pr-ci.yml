@@ -111,7 +111,7 @@ jobs:
         run: ./scripts/ci/run_container_validation.sh
 
   # ---------------------------------------------------------------------------
-  # Job 4: Coverage — full suite with a coverage gate (--cov-fail-under=85)
+  # Job 4: Coverage — full suite with a coverage gate (--cov-fail-under=95; actual 100%)
   # ---------------------------------------------------------------------------
   coverage:
     name: Coverage
@@ -136,7 +136,7 @@ jobs:
           python -m pip install -e '.[rag,dev]'
 
       - name: Run tests with coverage gate
-        run: python -m pytest -q --cov --cov-report=term-missing --cov-fail-under=85
+        run: python -m pytest -q --cov --cov-report=term-missing --cov-fail-under=95
 
   # ---------------------------------------------------------------------------
   # Job 5: Security — bandit static scan (gate) + pip-audit (informational)
