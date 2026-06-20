@@ -228,6 +228,9 @@ OPENROUTER_MODEL = env("OPENROUTER_MODEL", default="mistralai/mistral-7b-instruc
 
 DEFAULT_CHAT_CREDITS = env_int("DEFAULT_CHAT_CREDITS", default=100000)
 
+# Number of prior conversation turns included in the LLM prompt (slice 08).
+CHAT_HISTORY_TURNS = env_int("CHAT_HISTORY_TURNS", default=6)
+
 # ---------------------------------------------------------------------------
 # Structured JSON logging
 # ---------------------------------------------------------------------------

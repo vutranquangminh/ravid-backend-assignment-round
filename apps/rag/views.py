@@ -1,26 +1,34 @@
-"""Views for the RAG app (slice 04: ingestion status; slice 05: chat query).
+"""Views for the RAG app.
+
+Slice 04: ingestion status
+Slice 05: chat query with credit accounting
+Slice 08: chat continuation (chat_id) + SSE streaming
 
 Protected routes (JWT required):
   GET  /api/documents/status/?task_id=<id>  — poll ingestion job status
-  POST /api/chat/query/                     — RAG chat with credit accounting
+  POST /api/chat/query/                     — RAG chat with credit accounting + chat_id
+  POST /api/chat/stream/                    — SSE streaming chat with chat_id
 
 All error responses use the ``{"error": "..."}`` envelope (D-022).
-Cross-user or unknown task_id → 404, never 403 (D-020).
+Cross-user or unknown task_id/chat_id → 404, never 403 (D-020).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 
+from django.db import transaction
 from django.db.models import F, Value
 from django.db.models.functions import Greatest
+from django.http import Http404, StreamingHttpResponse
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import IngestionJob
+from .models import IngestionJob, Message
 
 logger = logging.getLogger(__name__)
 
@@ -107,16 +115,20 @@ class StatusView(APIView):
 
 
 class ChatQueryView(APIView):
-    """POST /api/chat/query/ — grounded RAG chat with credit accounting.
+    """POST /api/chat/query/ — grounded RAG chat with credit accounting + chat continuation.
 
     Flow:
       1. Validate request body → empty/missing query → 400.
-      2. Retrieve top-k chunks from the caller's Chroma collection.
-      3. No-context guard: if no chunks → 200 fixed answer, 0 tokens, no charge.
-      4. Credit check: balance ≤ 0 → 402 (no LLM call).
-      5. Call LLM → build answer + tokens.
-      6. Decrement balance atomically (floored at 0).
-      7. Return 200 {answer, tokens_consumed}.
+      2. Resolve conversation via chat_id (optional; creates new if absent).
+         Cross-user/missing chat_id → 404.
+      3. Build history from recent messages (bounded by CHAT_HISTORY_TURNS).
+      4. Retrieve top-k chunks from the caller's Chroma collection.
+      5. No-context guard: if no chunks → 200 fixed answer, 0 tokens, no charge,
+         but persist the user + assistant messages to the conversation.
+      6. Credit check: balance ≤ 0 → 402 (no LLM call).
+      7. Call LLM with history → build answer + tokens.
+      8. Decrement balance atomically (floored at 0) + persist messages.
+      9. Return 200 {answer, tokens_consumed, chat_id}.
 
     On embedding / LLM failure → 502 {error} (logged, no secrets).
     """
@@ -124,8 +136,9 @@ class ChatQueryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
-        from apps.accounts.models import get_or_create_account  # noqa: PLC0415
+        from apps.accounts.models import CreditAccount, get_or_create_account  # noqa: PLC0415
 
+        from .conversations import get_or_create_conversation, recent_history  # noqa: PLC0415
         from .llm import get_llm_client  # noqa: PLC0415
         from .retrieval import retrieve  # noqa: PLC0415
         from .serializers import ChatQuerySerializer  # noqa: PLC0415
@@ -136,14 +149,30 @@ class ChatQueryView(APIView):
         serializer = ChatQuerySerializer(data=request.data)
         if not serializer.is_valid():
             errors = serializer.errors
-            # Surface the first validation message directly (D-022).
             message = _first_error(errors)
             return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
 
         query: str = serializer.validated_data["query"]
+        chat_id = serializer.validated_data.get("chat_id")
 
         # ------------------------------------------------------------------
-        # 2. Retrieve relevant chunks (scoped to this user only — D-013)
+        # 2. Resolve conversation (errors must be JSON before any streaming)
+        # ------------------------------------------------------------------
+        try:
+            conversation = get_or_create_conversation(request.user, chat_id)
+        except Http404:
+            return Response(
+                {"error": "Conversation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # ------------------------------------------------------------------
+        # 3. Build history from recent messages
+        # ------------------------------------------------------------------
+        history = recent_history(conversation)
+
+        # ------------------------------------------------------------------
+        # 4. Retrieve relevant chunks (scoped to this user only — D-013)
         # ------------------------------------------------------------------
         try:
             chunks = retrieve(request.user.id, query)
@@ -158,16 +187,35 @@ class ChatQueryView(APIView):
             )
 
         # ------------------------------------------------------------------
-        # 3. No-context guard (D-015): no chunks → fixed answer, no charge
+        # 5. No-context guard (D-015): no chunks → fixed answer, no charge.
+        #    Still persist the turn so history is complete.
         # ------------------------------------------------------------------
         if not chunks:
+            with transaction.atomic():
+                Message.objects.create(
+                    conversation=conversation,
+                    role=Message.Role.USER,
+                    content=query,
+                    tokens=0,
+                )
+                Message.objects.create(
+                    conversation=conversation,
+                    role=Message.Role.ASSISTANT,
+                    content=_NO_CONTEXT_ANSWER,
+                    tokens=0,
+                )
+                conversation.save()  # bump updated_at
             return Response(
-                {"answer": _NO_CONTEXT_ANSWER, "tokens_consumed": 0},
+                {
+                    "answer": _NO_CONTEXT_ANSWER,
+                    "tokens_consumed": 0,
+                    "chat_id": conversation.id,
+                },
                 status=status.HTTP_200_OK,
             )
 
         # ------------------------------------------------------------------
-        # 4. Credit check — before calling the LLM (D-016)
+        # 6. Credit check — before calling the LLM (D-016)
         # ------------------------------------------------------------------
         account = get_or_create_account(request.user)
         if account.balance <= 0:
@@ -177,7 +225,7 @@ class ChatQueryView(APIView):
             )
 
         # ------------------------------------------------------------------
-        # 5. Build bounded context + call LLM (D-014)
+        # 7. Build bounded context + call LLM (D-014)
         # ------------------------------------------------------------------
         context = "\n\n".join(chunk["text"] for chunk in chunks)
         system = (
@@ -187,7 +235,7 @@ class ChatQueryView(APIView):
         )
 
         try:
-            result = get_llm_client().complete(system, context, query)
+            result = get_llm_client().complete(system, context, query, history)
         except Exception as exc:
             # Log the error type / message only — never the context (M-008).
             logger.error(
@@ -204,21 +252,206 @@ class ChatQueryView(APIView):
             )
 
         # ------------------------------------------------------------------
-        # 6. Decrement balance atomically, floored at 0 (D-016)
+        # 8. Decrement balance atomically, floored at 0 (D-016) + persist
         # ------------------------------------------------------------------
-        from apps.accounts.models import CreditAccount  # noqa: PLC0415
-
-        CreditAccount.objects.filter(pk=account.pk).update(
-            balance=Greatest(Value(0), F("balance") - result.tokens)
-        )
+        with transaction.atomic():
+            CreditAccount.objects.filter(pk=account.pk).update(
+                balance=Greatest(Value(0), F("balance") - result.tokens)
+            )
+            Message.objects.create(
+                conversation=conversation,
+                role=Message.Role.USER,
+                content=query,
+                tokens=0,
+            )
+            Message.objects.create(
+                conversation=conversation,
+                role=Message.Role.ASSISTANT,
+                content=result.answer,
+                tokens=result.tokens,
+            )
+            conversation.save()  # bump updated_at
 
         # ------------------------------------------------------------------
-        # 7. Return the answer
+        # 9. Return the answer (chat_id is additive — slice 05 fields preserved)
         # ------------------------------------------------------------------
         return Response(
-            {"answer": result.answer, "tokens_consumed": result.tokens},
+            {
+                "answer": result.answer,
+                "tokens_consumed": result.tokens,
+                "chat_id": conversation.id,
+            },
             status=status.HTTP_200_OK,
         )
+
+
+class ChatStreamView(APIView):
+    """POST /api/chat/stream/ — SSE streaming RAG chat with chat continuation.
+
+    All pre-stream checks (auth, validation, conversation resolution, credit check)
+    return normal JSON responses so errors are never embedded in the event stream.
+
+    SSE event sequence:
+      data: {"delta": "<text chunk>"}   (one per LLM chunk)
+      ...
+      data: {"event": "done", "chat_id": <id>, "tokens_consumed": <n>}
+      data: [DONE]
+
+    Messages are persisted and credits deducted AFTER the stream completes.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request):  # noqa: ANN201
+        from apps.accounts.models import get_or_create_account  # noqa: PLC0415
+
+        from .conversations import get_or_create_conversation, recent_history  # noqa: PLC0415
+        from .llm import get_llm_client  # noqa: PLC0415
+        from .retrieval import retrieve  # noqa: PLC0415
+        from .serializers import ChatQuerySerializer  # noqa: PLC0415
+
+        # ------------------------------------------------------------------
+        # 1. Validate input
+        # ------------------------------------------------------------------
+        serializer = ChatQuerySerializer(data=request.data)
+        if not serializer.is_valid():
+            message = _first_error(serializer.errors)
+            return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
+
+        query: str = serializer.validated_data["query"]
+        chat_id = serializer.validated_data.get("chat_id")
+
+        # ------------------------------------------------------------------
+        # 2. Resolve conversation (before streaming — errors must be JSON)
+        # ------------------------------------------------------------------
+        try:
+            conversation = get_or_create_conversation(request.user, chat_id)
+        except Http404:
+            return Response(
+                {"error": "Conversation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # ------------------------------------------------------------------
+        # 3. Build history
+        # ------------------------------------------------------------------
+        history = recent_history(conversation)
+
+        # ------------------------------------------------------------------
+        # 4. Retrieve chunks (before streaming — errors must be JSON)
+        # ------------------------------------------------------------------
+        try:
+            chunks = retrieve(request.user.id, query)
+        except Exception as exc:
+            logger.error(
+                "chat_stream: retrieval failed",
+                extra={"owner_id": request.user.id, "error": str(exc)},
+            )
+            return Response(
+                {"error": "Failed to retrieve context. Please try again."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        conv_id = conversation.id
+
+        # ------------------------------------------------------------------
+        # 5. No-context guard: persist turn then stream fixed answer
+        # ------------------------------------------------------------------
+        if not chunks:
+
+            def _guard_stream():  # noqa: ANN202
+                with transaction.atomic():
+                    Message.objects.create(
+                        conversation=conversation,
+                        role=Message.Role.USER,
+                        content=query,
+                        tokens=0,
+                    )
+                    Message.objects.create(
+                        conversation=conversation,
+                        role=Message.Role.ASSISTANT,
+                        content=_NO_CONTEXT_ANSWER,
+                        tokens=0,
+                    )
+                    conversation.save()
+                words = _NO_CONTEXT_ANSWER.split(" ")
+                last = len(words) - 1
+                for i, word in enumerate(words):
+                    chunk_text = word if i == last else word + " "
+                    yield f"data: {json.dumps({'delta': chunk_text})}\n\n".encode()
+                yield (
+                    f"data: {json.dumps({'event': 'done', 'chat_id': conv_id, 'tokens_consumed': 0})}\n\n"
+                ).encode()
+                yield b"data: [DONE]\n\n"
+
+            resp = StreamingHttpResponse(_guard_stream(), content_type="text/event-stream")
+            resp["Cache-Control"] = "no-cache"
+            resp["X-Accel-Buffering"] = "no"
+            return resp
+
+        # ------------------------------------------------------------------
+        # 6. Credit check (before streaming — 402 must be JSON, not an event)
+        # ------------------------------------------------------------------
+        account = get_or_create_account(request.user)
+        if account.balance <= 0:
+            return Response(
+                {"error": "Insufficient credits."},
+                status=status.HTTP_402_PAYMENT_REQUIRED,
+            )
+
+        # ------------------------------------------------------------------
+        # 7. Build context + start streaming
+        # ------------------------------------------------------------------
+        context = "\n\n".join(chunk["text"] for chunk in chunks)
+        system = (
+            "You are a helpful assistant. "
+            "Answer ONLY using the information in the provided context. "
+            "If the answer is not in the context, say you don't know."
+        )
+
+        llm = get_llm_client()
+        stream_result = llm.complete_stream(system, context, query, history)
+        account_pk = account.pk
+
+        def _sse_generator():  # noqa: ANN202
+            answer_parts: list[str] = []
+            for text_chunk in stream_result:
+                answer_parts.append(text_chunk)
+                yield f"data: {json.dumps({'delta': text_chunk})}\n\n".encode()
+
+            tokens = stream_result.tokens
+            full_answer = "".join(answer_parts)
+
+            # Persist messages + deduct credits atomically AFTER streaming ends.
+            with transaction.atomic():
+                from apps.accounts.models import CreditAccount as _CA  # noqa: PLC0415
+
+                _CA.objects.filter(pk=account_pk).update(
+                    balance=Greatest(Value(0), F("balance") - tokens)
+                )
+                Message.objects.create(
+                    conversation=conversation,
+                    role=Message.Role.USER,
+                    content=query,
+                    tokens=0,
+                )
+                Message.objects.create(
+                    conversation=conversation,
+                    role=Message.Role.ASSISTANT,
+                    content=full_answer,
+                    tokens=tokens,
+                )
+                conversation.save()
+
+            yield (
+                f"data: {json.dumps({'event': 'done', 'chat_id': conv_id, 'tokens_consumed': tokens})}\n\n"
+            ).encode()
+            yield b"data: [DONE]\n\n"
+
+        streaming_resp = StreamingHttpResponse(_sse_generator(), content_type="text/event-stream")
+        streaming_resp["Cache-Control"] = "no-cache"
+        streaming_resp["X-Accel-Buffering"] = "no"
+        return streaming_resp
 
 
 # ---------------------------------------------------------------------------
