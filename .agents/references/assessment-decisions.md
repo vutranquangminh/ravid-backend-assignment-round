@@ -56,7 +56,7 @@ LLM calls go through **OpenRouter**, base URL **`https://openrouter.ai/api/v1`**
 from memory — verify (see D-009, M-009).
 
 ### D-008 — LLM model slug — 2026-06-18
-Default model slug **`mistralai/mistral-7b-instruct:free`**. **Rationale:** free tier keeps the
+Default model slug **`meta-llama/llama-3.3-70b-instruct:free`**. **Rationale:** free tier keeps the
 assessment zero-cost. **Caveat:** OpenRouter free slugs rotate/deprecate — **verify the slug is
 still live at implementation time** and update this entry if it changed.
 

@@ -20,7 +20,7 @@ RAVID is a Retrieval-Augmented Generation (RAG) document chatbot backend. Authen
 | Vector store | Chroma `1.5.9`, one collection per user (`user_{user_id}`) |
 | RAG toolkit | LangChain `RecursiveCharacterTextSplitter` (chunking) + `HuggingFaceEmbeddings`; the Chroma client handles per-user indexing & retrieval directly — see note below |
 | Embeddings | Local HuggingFace `all-MiniLM-L6-v2` (384 dims, free, offline) |
-| LLM gateway | OpenRouter (`mistralai/mistral-7b-instruct:free`) |
+| LLM gateway | OpenRouter (`meta-llama/llama-3.3-70b-instruct:free`) |
 | API docs | drf-spectacular → Swagger UI at `/api/docs/` |
 | Observability | Structured JSON logs → Grafana Alloy → Loki → Grafana |
 | Delivery | Docker Compose (8 services) |

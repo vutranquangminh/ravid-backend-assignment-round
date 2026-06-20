@@ -75,7 +75,7 @@ git branch `feature/NN-<scope>` and one PR into merge-only `main`.
 - Implement `POST /api/chat/query/` accepting `{ "query": ... }`.
 - Retrieve owner-scoped context from the user's Chroma collection (`top_k = 4`, cosine).
 - Assemble a bounded, context-grounded prompt and call the LLM via OpenRouter
-  (`https://openrouter.ai/api/v1`, model `mistralai/mistral-7b-instruct:free`, verified at impl time).
+  (`https://openrouter.ai/api/v1`, model `meta-llama/llama-3.3-70b-instruct:free`, verified at impl time).
 - Apply the no-relevant-context guard.
 - Return `{ "answer": ..., "tokens_consumed": ... }`, reading tokens from the response `usage`.
 - Decrement the per-user credit balance by `tokens_consumed`.

@@ -32,7 +32,7 @@ Use this skill for the synchronous chat/query path (`apps/rag` retrieval side): 
 ## Locked Retrieval / Provider Values
 
 - Retrieval: `top_k=4`, similarity `cosine`. Query ONLY the authenticated owner's collection `user_{user_id}` (M-005: cross-user vector leakage).
-- LLM: OpenRouter at base url `https://openrouter.ai/api/v1`, OpenAI-compatible chat/completions shape (NOT the Anthropic Messages shape). Model slug `mistralai/mistral-7b-instruct:free` (free slugs rotate; verify at impl time).
+- LLM: OpenRouter at base url `https://openrouter.ai/api/v1`, OpenAI-compatible chat/completions shape (NOT the Anthropic Messages shape). Model slug `meta-llama/llama-3.3-70b-instruct:free` (free slugs rotate; verify at impl time).
 - Tokens: read `tokens_consumed` from the response `usage` field. Never estimate (M-009 / source-of-truth rule).
 - Context is bounded by `top_k` retrieved chunks; never send the user's whole document corpus to the LLM (M-007: unbounded context).
 

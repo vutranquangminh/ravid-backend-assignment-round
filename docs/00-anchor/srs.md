@@ -144,7 +144,7 @@ chatbot. It supports:
 
 - The system shall route LLM requests through OpenRouter at base URL
   `https://openrouter.ai/api/v1`, using the OpenAI-compatible chat/completions request shape.
-- The system shall use a free-tier model slug (target `mistralai/mistral-7b-instruct:free`),
+- The system shall use a free-tier model slug (target `meta-llama/llama-3.3-70b-instruct:free`),
   recognizing that free slugs rotate and shall be verified at implementation time.
 - The OpenRouter API key shall be read from configuration and shall never be logged.
 
@@ -254,7 +254,7 @@ pins live in `.agents/references/assessment-decisions.md` and the dependency man
 - LangChain (document loaders, `RecursiveCharacterTextSplitter`, vector store retriever)
 - `langchain-huggingface` with local embedding model `all-MiniLM-L6-v2` (384 dims)
 - OpenRouter as the LLM gateway (`https://openrouter.ai/api/v1`, OpenAI-compatible),
-  target model `mistralai/mistral-7b-instruct:free`
+  target model `meta-llama/llama-3.3-70b-instruct:free`
 - Grafana Alloy + Loki + Grafana for observability
 - Docker Compose for delivery
 
@@ -287,7 +287,7 @@ canonical source of locked decisions. If any default changes, update the decisio
 
 - Ambiguity: the brief lists several free models (Mistral 7B, Gemma, OpenChat variants) and free
   slugs rotate.
-- Default: target `mistralai/mistral-7b-instruct:free`, verified at implementation time;
+- Default: target `meta-llama/llama-3.3-70b-instruct:free`, verified at implementation time;
   never answered from memory.
 
 ### Chunking Parameters

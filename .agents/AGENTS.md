@@ -180,7 +180,7 @@ These defaults are already chosen for speed and consistency. The canonical, full
 - Chunking: `RecursiveCharacterTextSplitter` `chunk_size=1000`, `chunk_overlap=150`.
 - Retrieval: `top_k=4`, similarity = cosine.
 - Embeddings: local HuggingFace `all-MiniLM-L6-v2` (384 dims) via `langchain-huggingface` (free, offline, no key; OpenRouter free tier has NO embeddings).
-- LLM: OpenRouter base url `https://openrouter.ai/api/v1`, OpenAI-compatible chat/completions shape (NOT Anthropic Messages), model slug `mistralai/mistral-7b-instruct:free` (free slugs rotate; verify at impl time). Read `tokens_consumed` from the response `usage` field, never estimate.
+- LLM: OpenRouter base url `https://openrouter.ai/api/v1`, OpenAI-compatible chat/completions shape (NOT Anthropic Messages), model slug `meta-llama/llama-3.3-70b-instruct:free` (free slugs rotate; verify at impl time). Read `tokens_consumed` from the response `usage` field, never estimate.
 - Per-user vector isolation: ONE Chroma collection per user named `user_{user_id}`; every query scoped to the authenticated owner.
 - Ownership/authz: cross-user access to a document/task/vector returns `404` (NOT 403, to avoid leaking existence); missing/invalid JWT -> `401`.
 - No-relevant-context guard: if retrieval returns nothing relevant, answer that there isn't enough information in the user's documents.
