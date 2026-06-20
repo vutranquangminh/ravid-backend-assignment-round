@@ -1,0 +1,219 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "RAVID RAG Chatbot API",
+    "description": "Reviewer-ready Postman collection for the RAVID RAG chatbot API.\n\nFlow:\n1. Register — creates an account\n2. Login — returns JWT tokens (auto-stored)\n3. Upload Document — uploads a PDF/TXT/MD file (auto-stores document_id + task_id)\n4. Ingestion Status — polls until SUCCESS\n5. Chat Query — asks a question against the uploaded document\n\nProtected endpoints require: Authorization: Bearer {{accessToken}}",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "email",
+      "value": "reviewer@example.com"
+    },
+    {
+      "key": "password",
+      "value": "Sup3rSecret!"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "documentId",
+      "value": ""
+    },
+    {
+      "key": "taskId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Register",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/register/",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "register", ""]
+        },
+        "description": "Public endpoint. Creates a new account and returns user_id."
+      }
+    },
+    {
+      "name": "2. Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const payload = pm.response.json();",
+              "if (payload.token) { pm.collectionVariables.set('accessToken', payload.token); }"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/login/",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "login", ""]
+        },
+        "description": "Public endpoint. Returns JWT token (stored as accessToken)."
+      }
+    },
+    {
+      "name": "3. Upload Document",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const payload = pm.response.json();",
+              "if (payload.document_id !== undefined) { pm.collectionVariables.set('documentId', String(payload.document_id)); }",
+              "if (payload.task_id) { pm.collectionVariables.set('taskId', payload.task_id); }"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "",
+              "description": "Select a .pdf, .txt, or .md file (max 10 MB)"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/upload/",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "documents", "upload", ""]
+        },
+        "description": "Protected. Upload a document. Returns document_id and task_id (stored automatically)."
+      }
+    },
+    {
+      "name": "4. Ingestion Status",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/status/?task_id={{taskId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "documents", "status", ""],
+          "query": [
+            {
+              "key": "task_id",
+              "value": "{{taskId}}"
+            }
+          ]
+        },
+        "description": "Protected. Poll ingestion job status. Returns PROCESSING | SUCCESS | FAILURE."
+      }
+    },
+    {
+      "name": "5. Chat Query",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"What is this document about?\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/chat/query/",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "chat", "query", ""]
+        },
+        "description": "Protected. Ask a question against the authenticated user's uploaded documents. Returns answer and tokens_consumed."
+      }
+    },
+    {
+      "name": "6. List Documents",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "documents", ""]
+        },
+        "description": "Protected. List all documents owned by the authenticated user."
+      }
+    },
+    {
+      "name": "7. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/health/",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "health", ""]
+        },
+        "description": "Public liveness probe. Returns {status: ok}."
+      }
+    }
+  ]
+}

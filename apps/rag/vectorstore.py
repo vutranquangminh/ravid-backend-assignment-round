@@ -1,8 +1,12 @@
 """Chromadb vector store helpers for the RAG pipeline (slice 04).
 
-Uses the chromadb client **directly** (not langchain_chroma) with a
-PersistentClient so the same store is available across Celery workers and the
-Django process.
+Uses the chromadb client **directly** (not langchain_chroma).
+
+Dual-mode client selection (slice 07):
+  - If ``settings.CHROMA_HOST`` is set → ``chromadb.HttpClient`` (Docker /
+    production, pointing at the ``chroma`` service).
+  - Otherwise → ``chromadb.PersistentClient`` (local dev and tests, no
+    external process needed).
 
 Per-user isolation is enforced at the collection level: every read/write is
 scoped to ``user_<owner_id>`` (D-013, M-005).
@@ -24,20 +28,38 @@ from django.conf import settings
 # ---------------------------------------------------------------------------
 
 _client_lock = threading.Lock()
-_chroma_client: chromadb.PersistentClient | None = None
+_chroma_client: chromadb.ClientAPI | None = None
 
 
-def _client() -> chromadb.PersistentClient:
-    """Return (or lazily create) the shared PersistentClient singleton."""
+def _client() -> chromadb.ClientAPI:
+    """Return (or lazily create) the shared Chroma client singleton.
+
+    Selects HttpClient when ``settings.CHROMA_HOST`` is configured (Docker /
+    production); falls back to PersistentClient for local dev and tests.
+    """
     global _chroma_client
     if _chroma_client is None:
         with _client_lock:
             if _chroma_client is None:
-                _chroma_client = chromadb.PersistentClient(
-                    path=settings.CHROMA_PERSIST_DIR,
-                    settings=chromadb.Settings(anonymized_telemetry=False),
-                )
+                chroma_host = getattr(settings, "CHROMA_HOST", None)
+                if chroma_host:
+                    _chroma_client = chromadb.HttpClient(
+                        host=chroma_host,
+                        port=int(getattr(settings, "CHROMA_PORT", 8000)),
+                        settings=chromadb.Settings(anonymized_telemetry=False),
+                    )
+                else:
+                    _chroma_client = chromadb.PersistentClient(
+                        path=settings.CHROMA_PERSIST_DIR,
+                        settings=chromadb.Settings(anonymized_telemetry=False),
+                    )
     return _chroma_client
+
+
+def _reset_client() -> None:
+    """Reset the singleton — for testing only.  Not thread-safe in production."""
+    global _chroma_client
+    _chroma_client = None
 
 
 # ---------------------------------------------------------------------------

@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework_simplejwt",
+    "drf_spectacular",
     # Project apps
     "apps.common.apps.CommonConfig",
     "apps.accounts.apps.AccountsConfig",
@@ -151,7 +152,25 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "apps.common.exceptions.error_envelope_handler",
+}
+
+# ---------------------------------------------------------------------------
+# drf-spectacular (OpenAPI schema generation)
+# ---------------------------------------------------------------------------
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "RAVID API",
+    "DESCRIPTION": (
+        "Retrieval-Augmented Generation (RAG) document chatbot backend. "
+        "Authenticated users upload documents, those documents are asynchronously "
+        "parsed, chunked, embedded, and indexed into a per-user vector store. "
+        "Users can then chat against their own documents and receive grounded answers."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
 }
 
 # ---------------------------------------------------------------------------

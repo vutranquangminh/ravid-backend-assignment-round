@@ -1,0 +1,74 @@
+// Grafana Alloy configuration for RAVID.
+// Discovers Docker containers, scrapes their logs, parses the JSON fields,
+// promotes `service` as a Loki label, and forwards to Loki.
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+    replacement   = "$1"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    target_label = "job"
+    replacement  = "docker"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.logs.output
+  forward_to = [loki.process.parse.receiver]
+}
+
+loki.process "parse" {
+  // Extract RAG observability fields from JSON log lines.
+  // Fields kept in the payload (not promoted to labels) to maintain low
+  // Loki label cardinality (observability.md §labels).
+  stage.json {
+    expressions = {
+      level        = "level",
+      logger       = "logger",
+      request_id   = "request_id",
+      user_id      = "user_id",
+      document_id  = "document_id",
+      task_id      = "task_id",
+      operation    = "operation",
+      num_chunks   = "num_chunks",
+      retrieval_k  = "retrieval_k",
+      llm_model    = "llm_model",
+      duration_ms  = "duration_ms",
+    }
+  }
+
+  // Only `service` is promoted to a Loki label (low-cardinality: django|celery).
+  stage.labels {
+    values = {
+      service = "service",
+    }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+
+  external_labels = {
+    job = "docker",
+  }
+}

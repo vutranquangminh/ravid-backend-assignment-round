@@ -13,10 +13,12 @@ dependencies = [
     "django>=5.0,<5.3",
     "djangorestframework",
     "djangorestframework-simplejwt",
+    "drf-spectacular",
     "celery[redis]",
     "redis",
     "psycopg[binary]",
     "python-json-logger",
+    "gunicorn",
 ]
 
 [project.optional-dependencies]

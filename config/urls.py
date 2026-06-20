@@ -1,6 +1,8 @@
 """Root URL configuration for the RAVID project."""
 
 from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from rest_framework.permissions import AllowAny
 
 urlpatterns = [
     # --- Slice 01: liveness check ---
@@ -11,4 +13,18 @@ urlpatterns = [
     path("api/", include("apps.rag.urls")),
     # --- Slice 03: document upload / list / delete ---
     path("api/", include("apps.documents.urls")),
+    # --- Slice 07: OpenAPI schema + Swagger UI ---
+    path(
+        "api/schema/",
+        SpectacularAPIView.as_view(permission_classes=[AllowAny]),
+        name="schema",
+    ),
+    path(
+        "api/docs/",
+        SpectacularSwaggerView.as_view(
+            url_name="schema",
+            permission_classes=[AllowAny],
+        ),
+        name="swagger-ui",
+    ),
 ]
