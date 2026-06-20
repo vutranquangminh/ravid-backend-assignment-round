@@ -77,10 +77,22 @@ answer. It models the assessment's "Credit Consumption" requirement.
 A sequence of related chat turns belonging to one user. The bonus chat continuation feature lets
 a user extend a prior conversation by supplying a `chat_id`. Conversations are owner-scoped.
 
+### chat_id
+
+The identifier of a Conversation. Supplied (optionally) on `POST /api/chat/query/` and
+`POST /api/chat/stream/` to continue an existing owner-scoped conversation; returned in the
+response. A `chat_id` not owned by the requester returns `404`.
+
+### Server-Sent Events (SSE)
+
+A one-way streaming protocol over HTTP used by `POST /api/chat/stream/` to push the answer to
+the client incrementally, ending with a done event carrying `chat_id` and `tokens_consumed`.
+
 ### Citation
 
 A reference back to the source chunk(s) or document(s) a chat answer was grounded in, used to
-make answers traceable to the user's own documents.
+make answers traceable to the user's own documents. Note: explicit citation is not a delivered
+feature of the 12 live endpoints; it is documented here for conceptual reference only.
 
 ### Task ID
 

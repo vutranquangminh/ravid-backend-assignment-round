@@ -120,14 +120,16 @@ Focus on:
 
 ## Test Data Strategy
 
-Use deterministic, small, version-controlled fixtures:
+Fixtures are generated programmatically inside the tests rather than stored as
+version-controlled files. Each test that needs document content creates it in-memory:
 
-- a `.txt` fixture with known sentences for predictable retrieval
-- a `.md` fixture with headings and known facts
-- a small valid `.pdf` fixture with known text
-- a deliberately corrupt / unparsable fixture to drive failure propagation
-- fixtures kept small so embedding (even stubbed) and chunking are fast and
-  predictable
+- a deterministic small in-memory `.txt` payload with known sentences for predictable retrieval
+- a deterministic small in-memory `.md` payload with headings and known facts
+- a minimal valid PDF built in-memory with known text
+- a deliberately corrupt / unparsable byte payload to drive failure propagation
+
+There is no `tests/fixtures/` directory. Fixtures are kept small so embedding
+(even stubbed) and chunking are fast and predictable.
 
 ## Delivery Rule
 

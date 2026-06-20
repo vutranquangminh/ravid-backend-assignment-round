@@ -221,9 +221,9 @@ binary out of the DB while the DB remains the authoritative index/owner record.
 
 ### D-029 — Structured JSON logs → Alloy → Loki → Grafana — 2026-06-18
 Django and Celery both emit **structured JSON logs**, shipped by **Grafana Alloy** (not Promtail) to
-**Loki**, visualized in **Grafana**. Service labels: `service=django` (web API), `service=celery`
+**Loki**, visualized in **Grafana**. Service labels: `service=web` (web API), `service=celery`
 (worker). Keep Loki labels low-cardinality (`service`, `container`, `job`); high-cardinality fields
-(`task_id`, `document_id`, `user_id`) stay in the JSON payload only. **Rationale:** Promtail is
+(`task_id`, `document_id`, `owner_id`) stay in the JSON payload only. **Rationale:** Promtail is
 EOL; low-cardinality labels keep Loki performant; matches the reference repo's observability
 discipline adapted to RAG identifiers.
 

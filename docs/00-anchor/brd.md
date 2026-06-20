@@ -69,7 +69,11 @@ is easy for reviewers to run, inspect, and evaluate.
 - structured JSON logging across Django and Celery
 - log aggregation and visualization via Grafana Alloy, Loki, and Grafana
 - Docker Compose setup for the required services
-- README and API documentation
+- README and API documentation served live via OpenAPI schema (`GET /api/schema/`) and
+  Swagger UI (`GET /api/docs/`)
+- document management operations: list (`GET /api/documents/`) and delete
+  (`DELETE /api/documents/<id>/`), owner-scoped
+- a current-user identity endpoint (`GET /api/auth/me/`)
 - bonus: chat continuation by chat_id, and Server-Sent Events (SSE) streaming
 
 ## Out Of Scope
@@ -104,7 +108,7 @@ is easy for reviewers to run, inspect, and evaluate.
 
 - working backend codebase
 - Docker Compose stack (web, database, Redis, Celery, vector store, observability services)
-- API documentation
+- API documentation served live via OpenAPI schema (`GET /api/schema/`) and Swagger UI (`GET /api/docs/`)
 - README with setup and run instructions
 - structured logging pipeline and Grafana dashboard
 

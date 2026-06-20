@@ -46,11 +46,16 @@ Isolation is the single most important invariant:
         ▼
   ┌─────────────────────────────────────────────────────────┐
   │                Django + DRF  (web, port 8000)           │
+  │  /api/health/            → liveness (public)           │
   │  /api/register   /api/login                             │
+  │  /api/auth/me/           → current user (JWT)          │
   │  /api/documents/upload   → saves file, creates row,    │
   │                             dispatches Celery task      │
+  │  /api/documents/         → list (JWT)                  │
+  │  /api/documents/<id>/    → DELETE (JWT)                │
   │  /api/documents/status   → reads IngestionJob row      │
   │  /api/chat/query         → retrieve + LLM              │
+  │  /api/chat/stream/       → retrieve + LLM (SSE)        │
   │  /api/schema/            → OpenAPI spec (AllowAny)     │
   │  /api/docs/              → Swagger UI (AllowAny)       │
   └──────────────┬──────────────────┬──────────────────────┘
@@ -95,6 +100,7 @@ curl http://localhost:8000/api/health/
 | Service | URL |
 |---|---|
 | Django API | `http://localhost:8000` |
+| Health check | `http://localhost:8000/api/health/` |
 | Swagger UI | `http://localhost:8000/api/docs/` |
 | OpenAPI schema | `http://localhost:8000/api/schema/` |
 | Grafana | `http://localhost:3000` (admin / admin) |
@@ -129,12 +135,29 @@ curl -s "$BASE/api/documents/status/?task_id=<uuid>" \
   -H "Authorization: Bearer $TOKEN"
 # → {"task_id":"<uuid>", "status":"SUCCESS", "message":"..."}
 
+# Who am I?
+curl -s $BASE/api/auth/me/ -H "Authorization: Bearer $TOKEN"
+# → {"user_id":1, "email":"reviewer@example.com"}
+
 # Chat
 curl -s -X POST $BASE/api/chat/query/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query":"What is the main topic of this document?"}'
-# → {"answer":"...", "tokens_consumed":42}
+# → {"answer":"...", "tokens_consumed":42, "chat_id":1}
+
+# Continue the same conversation
+curl -s -X POST $BASE/api/chat/query/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Tell me more.","chat_id":1}'
+
+# Streaming chat (Server-Sent Events)
+curl -N -s -X POST $BASE/api/chat/stream/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What is the main topic?"}'
+# → data: {"delta":"..."}  ...  data: {"event":"done","chat_id":1,"tokens_consumed":89}  data: [DONE]
 ```
 
 See [`docs/api/README.md`](docs/api/README.md) for the Postman collection import instructions.
@@ -156,6 +179,8 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+**Shortcuts:** `make run` (start server), `make migrate`, `make test`, `make shell` wrap these commands (server commands load `.env.local` via `scripts/dev/run_local.sh`). **Optional local Postgres:** local settings default to SQLite; set `LOCAL_USE_POSTGRES=1` plus `POSTGRES_*` env vars in `.env.local` to run against a real Postgres instead.
+
 ## Running Tests
 
 ```bash
@@ -169,7 +194,7 @@ pytest --cov=apps --cov=config --cov-report=term-missing
 ruff check apps/ tests/ config/
 ```
 
-The test suite uses `config.settings.test` (sqlite in-memory, Celery eager, stub embeddings + LLM). All 572+ tests run offline.
+The test suite uses `config.settings.test` (sqlite in-memory, Celery eager, stub embeddings + LLM). All 754 tests run offline.
 
 ## Observability
 
@@ -180,14 +205,22 @@ Every Django and Celery log line is emitted as structured JSON on stdout. Fields
 | `ts` | ISO timestamp |
 | `level` | log level |
 | `logger` | logger name |
-| `request_id` | per-request UUID |
-| `user_id` | authenticated user pk |
-| `document_id` | source document pk |
-| `task_id` | Celery task id |
-| `operation` | `upload` / `embed` / `retrieve` / `llm` |
+| `request_id` | per-request UUID (middleware) |
+| `method` | HTTP method (middleware) |
+| `path` | request path (middleware) |
+| `status` | HTTP status code / job status |
 | `duration_ms` | operation wall time |
+| `owner_id` | authenticated user pk (tasks) |
+| `document_id` | source document pk (tasks) |
+| `job_id` | ingestion job pk (tasks) |
+| `operation` | `ingest` (tasks) |
+| `chunk_count` | chunks produced (tasks) |
+| `error` | error message on failure (tasks) |
+| `model` | LLM model slug (llm) |
+| `tokens_consumed` | total tokens from provider (llm) |
+| `context_chunks` | chunks passed to LLM (llm) |
 
-Grafana Alloy collects stdout from Docker containers (via Docker socket), parses JSON, and promotes only `service` (`django` or `celery`) as a Loki label. Open Grafana at `http://localhost:3000` — the **R.A.V.I.D. Observability** dashboard is pre-provisioned.
+Grafana Alloy collects stdout from Docker containers (via Docker socket), parses JSON, and promotes only `service` (`web` or `celery`) as a Loki label. Open Grafana at `http://localhost:3000` — the **R.A.V.I.D. Observability** dashboard is pre-provisioned.
 
 ## Slice / Branch Map
 
@@ -200,7 +233,8 @@ Grafana Alloy collects stdout from Docker containers (via Docker socket), parses
 | `feature/04-ingestion-pipeline-chunk-embed-chroma` | Celery ingestion pipeline, Chroma upsert |
 | `feature/05-rag-chat-query-openrouter` | Retrieval + LLM call, credit metering |
 | `feature/07-docker-and-delivery-compose-ci` | Docker Compose, CI, API docs (this branch) |
+| `feature/08-bonus-chat-continuation-sse` | Bonus: chat continuation via `chat_id`, SSE streaming endpoint `/api/chat/stream/` |
 
 ## License
 
-Take-home assessment deliverable; not for redistribution.
+Released under the [MIT License](LICENSE). Provided as a take-home assessment deliverable.

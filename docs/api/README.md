@@ -20,6 +20,8 @@ RAVID ships API documentation in two formats:
    3. **Upload Document** — select a `.pdf`, `.txt`, or `.md` file; stores `documentId` + `taskId`
    4. **Ingestion Status** — poll until `"status": "SUCCESS"`
    5. **Chat Query** — ask any question against your uploaded documents
+   6. **List Documents** — returns your owner-scoped document list
+   7. **Health Check** — unauthenticated liveness probe (`GET /api/health/`). Note: Health Check needs no Authorization header.
 
 ## Notes
 
