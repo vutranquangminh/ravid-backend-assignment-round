@@ -2,7 +2,7 @@
 # Slice 00 added [tool.ruff] and [tool.commitizen]; slice 01 adds the rest.
 
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
