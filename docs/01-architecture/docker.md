@@ -20,7 +20,7 @@ Canonical non-infrastructure decisions live in
 
 ### db
 
-- PostgreSQL service
+- PostgreSQL service (`postgres:16-alpine`)
 - system of record for relational data
 
 ### redis
@@ -62,9 +62,12 @@ collide with the application or leak to the network.
 - chroma: `127.0.0.1:8001:8000` — Chroma listens on `8000` inside its
   container; it is published on host `8001` to avoid clashing with `web:8000`.
   Loopback-bound so it is reachable for debugging but not exposed externally.
-- postgres: `127.0.0.1:5432:5432` (loopback only, reviewer convenience)
-- redis: `127.0.0.1:6379:6379` (loopback only, reviewer convenience)
-- loki: internal (queried by Grafana within the compose network)
+- postgres: `127.0.0.1:5432:5432` (loopback only, reviewer convenience; host port
+  overridable via `POSTGRES_PUBLISHED_PORT`)
+- redis: `127.0.0.1:6379:6379` (loopback only, reviewer convenience; host port
+  overridable via `REDIS_PUBLISHED_PORT`)
+- loki: `127.0.0.1:3100:3100` (loopback only; queried by Grafana within the compose
+  network, also reachable from host for debugging)
 
 ## Startup Ordering
 
@@ -81,10 +84,12 @@ and `chroma` (its heartbeat/v1 endpoint).
 
 Named Docker volumes for mutable service data:
 
-- `pgdata` — PostgreSQL data
+- `pg_data` — PostgreSQL data
 - `media` — application file storage (`uploads/user_{user_id}/`), mounted into
   both `web` and `celery` so the worker can read what `web` stored
 - `chroma_data` — Chroma persistence
+- `loki_data` — Loki log storage
+- `grafana_data` — Grafana state/dashboards-db
 
 Read-only bind mounts from the repo:
 

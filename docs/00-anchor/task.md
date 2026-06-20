@@ -4,9 +4,9 @@
 
 Break the RAVID RAG chatbot backend assessment into a practical execution order that supports
 fast delivery and clear validation. Each numbered workstream maps 1:1 to a delivery feature
-workspace under `docs/02-features/<NN-name>/` and to a matching OpenSpec change under
-`openspec/changes/<NN-name>/`. OpenSpec owns `proposal.md`, `design.md`, and `tasks.md` for each
-slice; `docs/02-features/<NN-name>/` owns the QA and delivery artifacts
+workspace under `docs/02-features/<NN>/` and to a matching OpenSpec change archived under
+`openspec/changes/archive/2026-06-1x-sNN-<scope>/`. OpenSpec owns `proposal.md`, `design.md`,
+and `tasks.md` for each slice; `docs/02-features/<NN>/` owns the QA and delivery artifacts
 (`test_matrix.md`, `pr-review.md`, `validation-report.md`, `pull_request.md`). Each slice is one
 git branch `feature/NN-<scope>` and one PR into merge-only `main`.
 
@@ -15,8 +15,8 @@ git branch `feature/NN-<scope>` and one PR into merge-only `main`.
 ### 00. Foundation: Branch And PR Workflow
 
 - Branch: `feature/00-foundation-branch-pr-workflow`
-- Feature workspace: `docs/02-features/00-foundation-branch-pr-workflow/`
-- OpenSpec change: `openspec/changes/00-foundation-branch-pr-workflow/`
+- Feature workspace: none (no `docs/02-features/` workspace for this slice)
+- OpenSpec change: none (no archived OpenSpec change for this slice)
 - Establish the `.agents/` operating system, the anchor and architecture docs, the hybrid
   OpenSpec + branch/PR discipline, the locked decisions, and the validation scripts.
 - No product or Django code in this branch.
@@ -24,8 +24,8 @@ git branch `feature/NN-<scope>` and one PR into merge-only `main`.
 ### 01. Foundation: Django + LangChain Bootstrap
 
 - Branch: `feature/01-foundation-django-langchain-bootstrap`
-- Feature workspace: `docs/02-features/01-foundation-django-langchain-bootstrap/`
-- OpenSpec change: `openspec/changes/01-foundation-django-langchain-bootstrap/`
+- Feature workspace: `docs/02-features/01-foundation/`
+- OpenSpec change: `openspec/changes/archive/2026-06-1x-s01-foundation-django-langchain-bootstrap/`
 - Initialize the Django project structure (apps `documents`, `rag`, plus accounts/core).
 - Configure PostgreSQL, DRF, JWT auth package, Celery, and Redis.
 - Wire the LangChain stack: document loaders, `RecursiveCharacterTextSplitter`, Chroma vector
@@ -35,10 +35,11 @@ git branch `feature/NN-<scope>` and one PR into merge-only `main`.
 ### 02. Authentication: Register, Login, JWT
 
 - Branch: `feature/02-authentication-register-login-jwt`
-- Feature workspace: `docs/02-features/02-authentication-register-login-jwt/`
-- OpenSpec change: `openspec/changes/02-authentication-register-login-jwt/`
+- Feature workspace: `docs/02-features/02-authentication/`
+- OpenSpec change: `openspec/changes/archive/2026-06-1x-s02-authentication-register-login-jwt/`
 - Implement `POST /api/register/` returning `201` with `user_id`.
 - Implement `POST /api/login/` returning `200` with a JWT `token`.
+- Implement `GET /api/auth/me/` returning `200` with `{ user_id, email }` for the authenticated user.
 - Protect document and chat routes with JWT; keep register and login public.
 - Validate auth error behavior (`400` on bad registration, `401` on bad login / missing token).
 - Seed the per-user credit balance at registration.
@@ -46,10 +47,12 @@ git branch `feature/NN-<scope>` and one PR into merge-only `main`.
 ### 03. Document Upload: PDF, TXT, MD
 
 - Branch: `feature/03-document-upload-pdf-txt-md`
-- Feature workspace: `docs/02-features/03-document-upload-pdf-txt-md/`
-- OpenSpec change: `openspec/changes/03-document-upload-pdf-txt-md/`
+- Feature workspace: `docs/02-features/03-document-upload/`
+- OpenSpec change: `openspec/changes/archive/2026-06-1x-s03-document-upload-pdf-txt-md/`
 - Define the owner-scoped document model and metadata.
 - Implement `POST /api/documents/upload/` accepting `multipart/form-data` with a `file` field.
+- Implement `GET /api/documents/` (owner-scoped list, 200).
+- Implement `DELETE /api/documents/<id>/` (owner-scoped, 204; non-owned/unknown -> 404).
 - Validate file type (`.pdf`, `.txt`, `.md` only) and size (max 10 MB); reject with `400` and
   the error envelope.
 - Persist the document, enqueue the ingestion task, and return `202` with `document_id` and `task_id`.
@@ -57,8 +60,8 @@ git branch `feature/NN-<scope>` and one PR into merge-only `main`.
 ### 04. Ingestion Pipeline: Chunk, Embed, Chroma
 
 - Branch: `feature/04-ingestion-pipeline-chunk-embed-chroma`
-- Feature workspace: `docs/02-features/04-ingestion-pipeline-chunk-embed-chroma/`
-- OpenSpec change: `openspec/changes/04-ingestion-pipeline-chunk-embed-chroma/`
+- Feature workspace: `docs/02-features/04-ingestion-pipeline/`
+- OpenSpec change: `openspec/changes/archive/2026-06-1x-s04-ingestion-pipeline-chunk-embed-chroma/`
 - Define the `IngestionJob` model and owner linkage.
 - Implement the Celery ingestion task: extract text (PDF/TXT/MD via LangChain loaders), chunk
   (`chunk_size = 1000`, `chunk_overlap = 150`), embed (local `all-MiniLM-L6-v2`), and upsert
@@ -70,21 +73,21 @@ git branch `feature/NN-<scope>` and one PR into merge-only `main`.
 ### 05. RAG Chat Query: OpenRouter
 
 - Branch: `feature/05-rag-chat-query-openrouter`
-- Feature workspace: `docs/02-features/05-rag-chat-query-openrouter/`
-- OpenSpec change: `openspec/changes/05-rag-chat-query-openrouter/`
+- Feature workspace: `docs/02-features/05-rag-chat/`
+- OpenSpec change: `openspec/changes/archive/2026-06-1x-s05-rag-chat-query-openrouter/`
 - Implement `POST /api/chat/query/` accepting `{ "query": ... }`.
 - Retrieve owner-scoped context from the user's Chroma collection (`top_k = 4`, cosine).
 - Assemble a bounded, context-grounded prompt and call the LLM via OpenRouter
   (`https://openrouter.ai/api/v1`, model `google/gemma-4-31b-it:free`, verified at impl time).
 - Apply the no-relevant-context guard.
-- Return `{ "answer": ..., "tokens_consumed": ... }`, reading tokens from the response `usage`.
+- Return `{ "answer": ..., "tokens_consumed": ..., "chat_id": ... }`, reading tokens from the response `usage`.
 - Decrement the per-user credit balance by `tokens_consumed`.
 
 ### 07. Docker And Delivery: Compose, CI
 
 - Branch: `feature/07-docker-and-delivery-compose-ci`
-- Feature workspace: `docs/02-features/07-docker-and-delivery-compose-ci/`
-- OpenSpec change: `openspec/changes/07-docker-and-delivery-compose-ci/`
+- Feature workspace: `docs/02-features/07-docker-and-delivery/`
+- OpenSpec change: `openspec/changes/archive/2026-06-1x-s07-docker-and-delivery-compose-ci/`
 - Write Dockerfiles and Docker Compose for web, PostgreSQL, Redis, Celery, Chroma, and the
   observability services (Grafana Alloy, Loki, Grafana).
 - Configure structured JSON logging for Django and Celery; ship logs via Alloy to Loki;
@@ -94,11 +97,11 @@ git branch `feature/NN-<scope>` and one PR into merge-only `main`.
 ### 08. Bonus: Chat Continuation And SSE
 
 - Branch: `feature/08-bonus-chat-continuation-sse`
-- Feature workspace: `docs/02-features/08-bonus-chat-continuation-sse/`
-- OpenSpec change: `openspec/changes/08-bonus-chat-continuation-sse/`
+- Feature workspace: `docs/02-features/08-bonus/`
+- OpenSpec change: `openspec/changes/archive/2026-06-1x-s08-bonus-chat-continuation-sse/`
 - Implement chat continuation by `chat_id` (owner-scoped; `404` for non-owned conversations).
-- Implement Server-Sent Events (SSE) streaming for chat responses, preserving owner-scoping and
-  the no-relevant-context guard.
+- Implement `POST /api/chat/stream/` (SSE) streaming for chat responses, preserving owner-scoping
+  and the no-relevant-context guard.
 
 ## Suggested Delivery Order
 
@@ -119,6 +122,7 @@ Mapped to the assessment's four parts.
 
 - [ ] registration works (`POST /api/register/` -> `201` with `user_id`)
 - [ ] login works (`POST /api/login/` -> `200` with JWT `token`)
+- [ ] current-user endpoint works (`GET /api/auth/me/` -> `200` with `user_id` and `email`)
 - [ ] protected routes require a valid JWT; missing/invalid token -> `401`
 - [ ] per-user credit balance exists and is decremented by tokens consumed
 
@@ -126,6 +130,8 @@ Mapped to the assessment's four parts.
 
 - [ ] upload accepts `.pdf`, `.txt`, `.md` and rejects others / oversize with `400`
 - [ ] upload returns `202` with `document_id` and `task_id`
+- [ ] document list works (`GET /api/documents/` -> `200` with owner-scoped list)
+- [ ] document delete works (`DELETE /api/documents/<id>/` -> `204`; non-owned/unknown -> `404`)
 - [ ] ingestion runs asynchronously in Celery (extract -> chunk -> embed -> index)
 - [ ] chunks are embedded with local `all-MiniLM-L6-v2` and stored in per-user Chroma collection
 - [ ] ingestion status works (`PROCESSING`/`SUCCESS`/`FAILURE`); unknown/non-owned task -> `404`
@@ -133,7 +139,7 @@ Mapped to the assessment's four parts.
 
 ### Part 3: RAG Chat Engine & Credit Consumption
 
-- [ ] chat query works (`POST /api/chat/query/` -> `200` with `answer` and `tokens_consumed`)
+- [ ] chat query works (`POST /api/chat/query/` -> `200` with `answer`, `tokens_consumed`, and `chat_id`)
 - [ ] retrieval is owner-scoped (`top_k = 4`, cosine) to the user's collection only
 - [ ] no-relevant-context guard answers "not enough information" instead of fabricating
 - [ ] `tokens_consumed` is read from the LLM `usage` field, not estimated
@@ -149,4 +155,5 @@ Mapped to the assessment's four parts.
 ### Bonus
 
 - [ ] chat continuation by `chat_id` works and is owner-scoped
+- [ ] `POST /api/chat/stream/` streams SSE and ends with a done event carrying `chat_id` and `tokens_consumed`
 - [ ] SSE streaming works and preserves owner-scoping and the context guard

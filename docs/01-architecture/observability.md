@@ -15,31 +15,42 @@ All application and worker logs are emitted as structured JSON to stdout.
 The following fields form the log payload contract. Fields are included when
 relevant to the operation; ids stay in the payload, never as Loki labels.
 
+Formatter-injected (all log lines):
+
 - `ts` — ISO-8601 timestamp
 - `level` — log level (`INFO`, `WARNING`, `ERROR`, ...)
 - `logger` — logger name / service origin
-- `request_id` — correlation id for an HTTP request (when available)
-- `user_id` — authenticated user id (when available and safe)
-- `document_id` — relevant document id (upload/ingest paths)
-- `task_id` — Celery task id (ingestion paths)
-- `chat_id` — conversation id (chat-continuation paths)
-- `collection` — the per-user Chroma collection name `user_{user_id}`
-- `operation` — one of `upload`, `embed`, `retrieve`, `llm`
-- `num_chunks` — number of chunks produced/stored (ingest) or retrieved (query)
-- `retrieval_k` — the top_k used for retrieval (4)
-- `llm_model` — the OpenRouter model slug used for the call
-- `prompt_tokens` — prompt tokens from the provider `usage` field
-- `completion_tokens` — completion tokens from the provider `usage` field
-- `duration_ms` — operation duration in milliseconds
+- `message` — log message text
+
+Middleware (HTTP request logs):
+
+- `request_id` — correlation id for an HTTP request
+- `method` — HTTP method
+- `path` — request path
+- `status` — HTTP status code
+- `duration_ms` — request duration in milliseconds
+
+Tasks (ingestion Celery worker logs):
+
+- `operation` — always `ingest`
+- `status` — ingestion job status
+- `document_id` — relevant document id
+- `owner_id` — owning user pk
+- `job_id` — ingestion job pk
+- `chunk_count` — number of chunks produced/stored
+- `error` — error message on failure
+
+LLM (chat logs):
+
+- `model` — the OpenRouter model slug used for the call
+- `tokens_consumed` — total tokens from the provider `usage` field
+- `context_chunks` — number of chunks passed to the LLM
 
 ### Operation Tagging
 
-The `operation` field is the primary way to slice RAG behavior:
-
-- `upload` — request received, file validated and stored, job dispatched
-- `embed` — chunking + embedding + Chroma upsert (worker)
-- `retrieve` — owner-scoped similarity search for a query
-- `llm` — the OpenRouter chat/completions call and its token usage
+The `operation` field is emitted by the ingestion Celery task with the single value `ingest`.
+It covers the full ingestion run (load → split → embed → Chroma upsert). No other `operation`
+values are currently emitted by the application code.
 
 ## Hard Rules (Never Log)
 
@@ -56,7 +67,7 @@ A leak of secrets or document text into logs is a defect (see MISTAKE M-008).
 Use explicit, low-cardinality service labels so logs split cleanly in Loki and
 Grafana:
 
-- `service=django`
+- `service=web`
 - `service=celery`
 
 ## Collection Strategy
@@ -72,10 +83,10 @@ Keep labels minimal and low-cardinality to avoid cardinality explosion.
 
 Recommended labels:
 
-- `service` (django | celery)
+- `service` (web | celery)
 
-Keep all high-cardinality identifiers (`request_id`, `user_id`, `document_id`,
-`task_id`, `chat_id`, `collection`) in the JSON payload, never as labels.
+Keep all high-cardinality identifiers (`request_id`, `owner_id`, `document_id`,
+`job_id`) in the JSON payload, never as labels.
 
 ## Grafana Dashboard Requirements
 
@@ -90,7 +101,8 @@ Keep all high-cardinality identifiers (`request_id`, `user_id`, `document_id`,
 ### Bonus Panel 2
 
 - token consumption and/or slowest operations by `duration_ms`, sliced by
-  `operation` (`embed`, `retrieve`, `llm`)
+  `operation` (currently only `ingest` is emitted; LLM token data is available
+  via the `tokens_consumed` and `context_chunks` fields in chat log lines)
 
 ## Failure Visibility Rules
 
@@ -100,9 +112,8 @@ Keep all high-cardinality identifiers (`request_id`, `user_id`, `document_id`,
 - an ingestion failure must be visible BOTH in the logs AND through the
   ingestion-status API (`status=FAILURE` with `error`). Surfacing it in only
   one place is a defect (MISTAKE M-006).
-- retrieval that returns no relevant context is logged at INFO with `operation`
-  = `retrieve` and `num_chunks` = 0, and the chat answer states there is not
-  enough information in the user's documents.
+- retrieval that returns no relevant context is logged at INFO, and the chat
+  answer states there is not enough information in the user's documents.
 
 ## Log Retention Assumption
 

@@ -25,8 +25,9 @@ file is authoritative.
 
 Responsibilities:
 
-- expose all public HTTP endpoints (register, login, document upload, ingestion
-  status, chat query)
+- expose all public HTTP endpoints (health check, register, login, auth/me,
+  document upload, document list, document delete, ingestion status, chat query,
+  chat stream, OpenAPI schema, Swagger UI)
 - validate requests (file type/size, payload shape)
 - authenticate protected routes with JWT (`djangorestframework-simplejwt`)
 - persist users, document metadata, and ingestion-job records
@@ -145,12 +146,18 @@ Responsibilities:
 
 ### HTTP API
 
+- liveness (`GET /api/health/`, public)
 - registration (`POST /api/register/`)
 - login (`POST /api/login/`)
-- document upload (`POST /api/documents/upload/`)
-- ingestion status lookup (`GET /api/documents/status/?task_id=<id>`)
-- chat query (`POST /api/chat/query/`)
-- bonus: chat continuation via `chat_id` and SSE streaming
+- current user identity (`GET /api/auth/me/`, JWT)
+- document upload (`POST /api/documents/upload/`, JWT)
+- document list (`GET /api/documents/`, JWT, owner-scoped)
+- document delete (`DELETE /api/documents/<id>/`, JWT, owner-scoped)
+- ingestion status lookup (`GET /api/documents/status/?task_id=<id>`, JWT)
+- chat query (`POST /api/chat/query/`, JWT)
+- chat stream (`POST /api/chat/stream/`, JWT, SSE)
+- OpenAPI schema (`GET /api/schema/`, public)
+- Swagger UI (`GET /api/docs/`, public)
 
 ### JWT Authentication
 

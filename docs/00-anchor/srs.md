@@ -42,6 +42,13 @@ chatbot. It supports:
 - On success the endpoint shall return `200 OK` with `{ "message": "...", "token": "<jwt_access_token>" }`.
 - On failure the endpoint shall return `401 Unauthorized` with `{ "error": "Invalid email or password" }`.
 
+### FR-2b Current User Identity
+
+- The system shall expose `GET /api/auth/me/`.
+- The endpoint shall require a valid JWT access token.
+- On success the endpoint shall return `200 OK` with `{ "user_id": <int>, "email": "<email>" }`.
+- A missing or invalid JWT shall return `401 Unauthorized`.
+
 ### FR-3 Route Protection
 
 - The system shall require a valid JWT access token, passed as `Authorization: Bearer <token>`,
@@ -61,6 +68,19 @@ chatbot. It supports:
 - The endpoint shall persist the uploaded file and a document record owned by the authenticated user.
 - The endpoint shall enqueue an asynchronous ingestion task and return `202 Accepted` with
   `{ "message": "...", "document_id": "<document_id>", "task_id": "<task_id>" }`.
+
+### FR-4b Document Listing
+
+- The system shall expose `GET /api/documents/`.
+- The endpoint shall require a valid JWT and shall return `200 OK` with the list of documents
+  owned by the authenticated user only.
+
+### FR-4c Document Deletion
+
+- The system shall expose `DELETE /api/documents/<id>/`.
+- The endpoint shall require a valid JWT and on success shall return `204 No Content`.
+- A document not owned by the requester (or unknown id) shall return `404 Not Found`
+  (per NFR-4 ownership policy).
 
 ### FR-5 Ingestion Task Status
 
@@ -122,9 +142,12 @@ chatbot. It supports:
 - The endpoint shall accept a JSON body with `query`.
 - The endpoint shall retrieve owner-scoped context (FR-10), assemble a context-grounded prompt,
   and obtain an answer from the LLM via OpenRouter.
-- On success the endpoint shall return `200 OK` with `{ "answer": "<text>", "tokens_consumed": <int> }`.
+- On success the endpoint shall return `200 OK` with
+  `{ "answer": "<text>", "tokens_consumed": <int>, "chat_id": <int> }`.
 - The endpoint shall read `tokens_consumed` from the LLM response `usage` field and shall not
   estimate it.
+- The endpoint shall accept an optional `chat_id` in the request body to continue an existing
+  owner-scoped conversation (see FR-20); when `chat_id` is omitted a new conversation is created.
 
 ### FR-12 No-Relevant-Context Guard
 
@@ -167,7 +190,7 @@ chatbot. It supports:
 
 ### FR-17 Dashboard Visibility
 
-- The dashboard shall show live logs by service (`service=django`, `service=celery`).
+- The dashboard shall show live logs by service (`service=web`, `service=celery`).
 - The solution should support useful operational panels, for example error-level log count
   over the last 30 minutes and the slowest ingestion or chat operations by logged `duration_ms`.
 
@@ -182,6 +205,13 @@ chatbot. It supports:
 
 - The solution shall include API documentation.
 - The documentation tool may be OpenAPI, Bruno, Postman, or another widely used option.
+- The solution shall serve a live OpenAPI 3 schema at `GET /api/schema/` and an interactive
+  Swagger UI at `GET /api/docs/` (both public).
+
+### FR-0 Liveness
+
+- The system shall expose a public `GET /api/health/` endpoint returning a liveness status
+  without authentication (e.g. `{ "status": "ok" }`).
 
 ### FR-20 Chat Continuation (Bonus)
 
@@ -193,6 +223,9 @@ chatbot. It supports:
 ### FR-21 SSE Streaming (Bonus)
 
 - The system should support streaming chat responses in real time using Server-Sent Events (SSE).
+- The system shall expose `POST /api/chat/stream/` which streams the answer as Server-Sent Events
+  and accepts the same body as FR-11 (including optional `chat_id`).
+- The stream shall conclude with a final event `data: {"event": "done", "chat_id": <id>, "tokens_consumed": <n>}`.
 - Streaming shall preserve the same owner-scoping and no-relevant-context guard as the
   non-streaming path.
 

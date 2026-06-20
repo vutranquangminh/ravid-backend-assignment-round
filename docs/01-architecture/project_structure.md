@@ -11,11 +11,22 @@ owner-scoped retrieval, and LLM chat without unnecessary abstraction.
 ```text
 .
 ├── compose.yaml
+├── compose.ci.yaml
+├── Makefile
+├── pyproject.toml
+├── README.md
+├── CHANGELOG.md
+├── LICENSE
+├── scripts/
+│   ├── dev/
+│   │   └── run_local.sh
+│   └── ci/
 ├── config/
 │   ├── settings/
 │   │   ├── base.py
 │   │   ├── local.py
-│   │   └── test.py
+│   │   ├── test.py
+│   │   └── production.py
 │   ├── urls.py
 │   ├── celery.py
 │   └── wsgi.py / asgi.py
@@ -25,10 +36,12 @@ owner-scoped retrieval, and LLM chat without unnecessary abstraction.
 │   ├── rag/
 │   └── common/
 ├── tests/
+│   ├── unit/
 │   ├── integration/
-│   ├── fixtures/
 │   └── smoke/
 ├── docs/
+├── openspec/
+├── .github/
 ├── docker/
 │   ├── django/
 │   ├── alloy/
@@ -83,10 +96,11 @@ Keep a consistent vertical layering so each slice is easy to review:
 
 - `serializers.py` — request/response validation and shaping
 - `views.py` — thin DRF views: authenticate, validate, delegate, respond
-- `services/` — business logic (ingestion orchestration, retrieval, credit
+- `services.py` — business logic (ingestion orchestration, retrieval, credit
   accounting, ownership checks)
 - `tasks.py` — Celery task entry points (thin wrappers over services)
-- `pipeline/` (in `apps/rag`) — the LangChain ingestion and retrieval steps
+- flat modules in `apps/rag`: `pipeline.py`, `retrieval.py`, `embeddings.py`,
+  `llm.py`, `vectorstore.py`, `conversations.py` (no `pipeline/` package)
 - `models.py` — persistence and model helper methods
 
 Views must not contain pipeline logic; tasks must not contain HTTP concerns.
@@ -111,6 +125,14 @@ so they can be stubbed in `settings/test.py`.
 - a temporary/isolated Chroma location
 - test-only fast defaults
 
+### `config/settings/production.py`
+
+- env-only configuration (no insecure defaults)
+- the settings module used by the Docker `web` and `celery` services
+  (`DJANGO_SETTINGS_MODULE=config.settings.production`)
+
+The settings split is base / local / test / production (4 modules).
+
 ### `config/celery.py`
 
 - Celery app definition, broker/result backend wiring, autodiscovery of
@@ -127,10 +149,15 @@ so they can be stubbed in `settings/test.py`.
 
 ## Testing Layout
 
-- keep straightforward app-local tests close to the app
-- use `tests/integration/` for multi-component API and async ingestion scenarios
-- use `tests/fixtures/` for deterministic `.pdf`/`.txt`/`.md` fixtures
-- use `tests/smoke/` for Docker and observability verification helpers
+All tests live under the top-level `tests/` tree; there are no app-local test modules.
+
+- `tests/unit/` — unit tests (serializers, validators, model helpers, status mapping)
+- `tests/integration/` — multi-component API and async ingestion scenarios
+- `tests/smoke/` — Docker and observability verification helpers
+
+Test fixtures are generated programmatically inside the tests (deterministic small in-memory
+`.txt`/`.md` content, an in-memory minimal PDF, and a deliberately corrupt byte payload for
+failure propagation). There is no `tests/fixtures/` directory of version-controlled fixture files.
 
 ## Why This Structure
 

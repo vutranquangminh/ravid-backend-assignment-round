@@ -74,7 +74,6 @@ Suggested fields:
 - `error_message`
 - `created_at`
 - `updated_at`
-- `completed_at`
 
 Responsibilities:
 
@@ -92,7 +91,7 @@ Purpose:
 Suggested shape:
 
 - `Conversation(id, owner FK, created_at)` — `id` is the public `chat_id`
-- `Message(id, conversation FK, role, content, tokens_consumed, created_at)`
+- `Message(id, conversation FK, role, content, tokens, created_at)` (model field is `tokens`)
 
 Used only by the chat-continuation bonus; the core chat query works without it.
 
@@ -151,13 +150,13 @@ collection only; a query must never read another user's vectors (MISTAKE M-005).
 
 ## Indexing Guidance
 
-Index the following:
+The following indexes are present in the implemented schema:
 
-- `IngestionJob.celery_task_id` (status lookup by `task_id`)
-- `IngestionJob.status`
-- `IngestionJob.source_document_id`
-- `IngestionJob.owner_id`
-- `Document.owner_id`
+- `IngestionJob.celery_task_id` (unique, `db_index=True`; status lookup by `task_id`)
+- `IngestionJob.owner_id` (`db_index=True`)
+- `Document.owner_id` (`db_index=True`)
+
+`IngestionJob.status` and `IngestionJob.source_document_id` are intentionally unindexed in v1.
 
 ## Non-Goals
 

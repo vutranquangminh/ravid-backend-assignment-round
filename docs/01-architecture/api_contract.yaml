@@ -1,503 +1,758 @@
-openapi: 3.1.0
+openapi: 3.0.3
 info:
-  title: R.A.V.I.D. RAG Document Chatbot Backend API
-  version: 0.1.0
-  description: >
-    SOURCE OF TRUTH for the R.A.V.I.D. HTTP API. Endpoint paths, status codes,
-    and JSON shapes are taken verbatim from the assessment brief. Every error
-    response uses the shared single-string envelope {"error": "<message>"}.
-    Protected endpoints use bearer JWT. Cross-user access to a document, task,
-    or vector returns 404 (never 403) to avoid leaking existence; missing or
-    invalid JWT returns 401. Canonical non-API decisions (chunking, top_k,
-    embedding model, LLM gateway) live in
-    .agents/references/assessment-decisions.md.
-servers:
-  - url: http://localhost:8000
+  title: RAVID API
+  version: 1.0.0
+  description: Retrieval-Augmented Generation (RAG) document chatbot backend. Authenticated
+    users upload documents, those documents are asynchronously parsed, chunked, embedded,
+    and indexed into a per-user vector store. Users can then chat against their own
+    documents and receive grounded answers.
+paths:
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      description: Return the authenticated user's ID and email. Requires a valid
+        JWT Bearer token.
+      summary: Get current user info
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+              examples:
+                Success:
+                  value:
+                    user_id: 1
+                    email: a@b.com
+                  summary: success
+          description: Current user info.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedResponse'
+          description: Authentication credentials were not provided or are invalid.
+  /api/chat/query/:
+    post:
+      operationId: chat_query_create
+      description: Submit a question to the RAG pipeline. Retrieves relevant chunks
+        from the user's document collection, calls the LLM with context, deducts credits,
+        and returns the answer. Pass chat_id to continue an existing conversation.
+      summary: Chat query (RAG)
+      tags:
+      - chat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatQueryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChatQueryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChatQueryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatQuerySuccessResponse'
+              examples:
+                Success:
+                  value:
+                    answer: The answer is ...
+                    tokens_consumed: 89
+                    chat_id: 1
+                  summary: success
+          description: Answer from the RAG pipeline.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatQueryBadRequestResponse'
+              examples:
+                MissingQuery:
+                  value:
+                    error: query is required.
+                  summary: missing_query
+          description: Missing or invalid query.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatQueryUnauthorizedResponse'
+          description: Authentication credentials were not provided or are invalid.
+        '402':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatQueryPaymentRequiredResponse'
+              examples:
+                NoCredits:
+                  value:
+                    error: Insufficient credits.
+                  summary: no_credits
+          description: Insufficient credits.
+  /api/chat/stream/:
+    post:
+      operationId: chat_stream_create
+      description: |-
+        Submit a question to the RAG pipeline and receive the answer as a Server-Sent Events (SSE) stream. Pre-stream checks (auth, validation, credit) return standard JSON errors. Once streaming starts, events are:
+
+        - `data: {"delta": "<text chunk>"}` — one per LLM output chunk
+        - `data: {"event": "done", "chat_id": <id>, "tokens_consumed": <n>}` — final summary
+        - `data: [DONE]` — stream terminator
+
+        Messages are persisted and credits deducted after the stream completes.
+      summary: Chat stream (SSE)
+      tags:
+      - chat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatQueryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChatQueryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChatQueryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+          description: 'Server-Sent Events stream (text/event-stream). Each line is
+            `data: <json>\n\n`. Delta events: `{"delta": "<chunk>"}`. Final event:
+            `{"event": "done", "chat_id": 1, "tokens_consumed": 89}`. Terminator:
+            `[DONE]`.'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStreamBadRequestResponse'
+              examples:
+                MissingQuery:
+                  value:
+                    error: query is required.
+                  summary: missing_query
+          description: Missing or invalid query.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStreamUnauthorizedResponse'
+          description: Authentication credentials were not provided or are invalid.
+        '402':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStreamPaymentRequiredResponse'
+              examples:
+                NoCredits:
+                  value:
+                    error: Insufficient credits.
+                  summary: no_credits
+          description: Insufficient credits.
+  /api/documents/:
+    get:
+      operationId: documents_retrieve
+      description: Return a list of all documents owned by the authenticated user.
+      summary: List documents
+      tags:
+      - documents
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Document'
+          description: List of the caller's documents.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentListUnauthorizedResponse'
+          description: Authentication credentials were not provided or are invalid.
+  /api/documents/{id}/:
+    delete:
+      operationId: documents_destroy
+      description: Delete the caller-owned document by ID. Also removes all associated
+        vectors from the vector store. Cross-user or missing ID returns 404.
+      summary: Delete a document
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - documents
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: Document deleted successfully. No content returned.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDeleteUnauthorizedResponse'
+          description: Authentication credentials were not provided or are invalid.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDeleteNotFoundResponse'
+          description: Document not found or belongs to another user.
+  /api/documents/status/:
+    get:
+      operationId: documents_status_retrieve
+      description: Poll the status of a document ingestion job by Celery task ID.
+        Returns PROCESSING while pending/started, SUCCESS when complete, or FAILURE
+        with an error message if the job failed.
+      summary: Poll ingestion job status
+      parameters:
+      - in: query
+        name: task_id
+        schema:
+          type: string
+        description: The Celery task ID returned by the upload endpoint.
+        required: true
+      tags:
+      - documents
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+              examples:
+                Processing:
+                  value:
+                    task_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    status: PROCESSING
+                  summary: processing
+                Success:
+                  value:
+                    task_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    status: SUCCESS
+                    message: Document successfully parsed, embedded, and indexed in
+                      vector storage.
+                  summary: success
+                Failure:
+                  value:
+                    task_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    status: FAILURE
+                    error: Failed to parse document.
+                  summary: failure
+          description: Current ingestion status.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusMissingParamResponse'
+              examples:
+                MissingTaskId:
+                  value:
+                    error: task_id query parameter is required.
+                  summary: missing_task_id
+          description: Missing required task_id query parameter.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusUnauthorizedResponse'
+          description: Authentication credentials were not provided or are invalid.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusNotFoundResponse'
+              examples:
+                NotFound:
+                  value:
+                    error: Task not found.
+                  summary: not_found
+          description: Task not found or belongs to another user.
+  /api/documents/upload/:
+    post:
+      operationId: documents_upload_create
+      description: Upload a PDF, TXT, or Markdown file. The file is stored and an
+        ingestion job is dispatched asynchronously. Returns 202 with the document
+        ID and Celery task ID to poll status.
+      summary: Upload a document
+      tags:
+      - documents
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentUploadRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSuccessResponse'
+              examples:
+                Accepted:
+                  value:
+                    message: Document uploaded and ingestion started
+                    document_id: 1
+                    task_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  summary: accepted
+          description: Document accepted and ingestion started.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadErrorResponse'
+              examples:
+                InvalidFormat:
+                  value:
+                    error: Invalid file format. Only PDF, TXT, and Markdown files
+                      are allowed.
+                  summary: invalid_format
+          description: Invalid file format or validation failure.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUnauthorizedResponse'
+          description: Authentication credentials were not provided or are invalid.
+  /api/health/:
+    get:
+      operationId: health_retrieve
+      description: Liveness probe that returns 200 OK without touching the database.
+      summary: Health check
+      tags:
+      - health
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                Ok:
+                  value:
+                    status: ok
+                  summary: ok
+          description: Service is healthy.
+  /api/login/:
+    post:
+      operationId: login_create
+      description: Authenticate with email and password. Returns a JWT access token
+        on success.
+      summary: Login and obtain a JWT token
+      tags:
+      - login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSuccessResponse'
+              examples:
+                Success:
+                  value:
+                    message: Login successful
+                    token: <jwt>
+                  summary: success
+          description: Login successful.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginErrorResponse'
+              examples:
+                InvalidCredentials:
+                  value:
+                    error: Invalid email or password
+                  summary: invalid_credentials
+          description: Invalid credentials.
+  /api/register/:
+    post:
+      operationId: register_create
+      description: Create a new user account. Returns 201 with the new user's ID on
+        success.
+      summary: Register a new user
+      tags:
+      - register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterSuccessResponse'
+              examples:
+                Success:
+                  value:
+                    message: Registration successful
+                    user_id: 1
+                  summary: success
+          description: User registered successfully.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterErrorResponse'
+              examples:
+                DuplicateEmail:
+                  value:
+                    error: User with this email already exists.
+                  summary: duplicate_email
+          description: Validation error or duplicate email.
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
   schemas:
-    ErrorResponse:
+    ChatQueryBadRequestResponse:
       type: object
-      description: Shared error envelope used by every non-2xx response.
       properties:
         error:
           type: string
-      required: [error]
-    RegisterRequest:
+      required:
+      - error
+    ChatQueryPaymentRequiredResponse:
       type: object
       properties:
-        email:
+        error:
           type: string
-          format: email
-        password:
+      required:
+      - error
+    ChatQueryRequest:
+      type: object
+      description: |-
+        Validate the chat query request body.
+
+        Fields:
+            query:   Non-empty, non-whitespace string containing the user's question.
+            chat_id: Optional integer PK of an existing Conversation to continue.
+                     Omit or pass null to start a new conversation.
+      properties:
+        query:
           type: string
-      required: [email, password]
-    RegisterResponse:
+          minLength: 1
+        chat_id:
+          type: integer
+          nullable: true
+      required:
+      - query
+    ChatQuerySuccessResponse:
       type: object
       properties:
-        message:
+        answer:
           type: string
-        user_id:
-          oneOf:
-            - type: integer
-            - type: string
-      required: [message, user_id]
+        tokens_consumed:
+          type: integer
+        chat_id:
+          type: integer
+      required:
+      - answer
+      - chat_id
+      - tokens_consumed
+    ChatQueryUnauthorizedResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    ChatStreamBadRequestResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    ChatStreamPaymentRequiredResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    ChatStreamUnauthorizedResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    Document:
+      type: object
+      description: Read-only serializer for document list output.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        original_name:
+          type: string
+          readOnly: true
+        content_type:
+          type: string
+          readOnly: true
+        size_bytes:
+          type: integer
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+        uploaded_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - content_type
+      - id
+      - original_name
+      - size_bytes
+      - status
+      - uploaded_at
+    DocumentDeleteNotFoundResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    DocumentDeleteUnauthorizedResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    DocumentListUnauthorizedResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    DocumentUploadRequest:
+      type: object
+      description: Validate a multipart file upload.
+      properties:
+        file:
+          type: string
+          format: binary
+      required:
+      - file
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+      - status
+    LoginErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
     LoginRequest:
       type: object
+      description: Validate a login request body.
       properties:
         email:
           type: string
           format: email
+          minLength: 1
         password:
           type: string
-      required: [email, password]
-    LoginResponse:
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    LoginSuccessResponse:
       type: object
       properties:
         message:
           type: string
         token:
           type: string
-          description: "JWT access token to be sent as `Authorization: Bearer <token>`."
-      required: [message, token]
-    UploadDocumentResponse:
+      required:
+      - message
+      - token
+    MeResponse:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        email:
+          type: string
+          format: email
+      required:
+      - email
+      - user_id
+    RegisterErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    RegisterRequest:
+      type: object
+      description: Validate a registration request body.
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        confirm_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    RegisterSuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        user_id:
+          type: integer
+      required:
+      - message
+      - user_id
+    StatusEnum:
+      enum:
+      - PROCESSING
+      - SUCCESS
+      - FAILURE
+      type: string
+      description: |-
+        * `PROCESSING` - PROCESSING
+        * `SUCCESS` - SUCCESS
+        * `FAILURE` - FAILURE
+    StatusMissingParamResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    StatusNotFoundResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    StatusResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+        message:
+          type: string
+        error:
+          type: string
+      required:
+      - status
+      - task_id
+    StatusUnauthorizedResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    UnauthorizedResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    UploadErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    UploadSuccessResponse:
       type: object
       properties:
         message:
           type: string
         document_id:
-          oneOf:
-            - type: integer
-            - type: string
-        task_id:
-          type: string
-          description: Ingestion task id, used to poll /api/documents/status/.
-      required: [message, document_id, task_id]
-    StatusProcessingResponse:
-      type: object
-      description: >
-        Returned while ingestion is queued or running. Internal job states
-        PENDING and STARTED are both normalized to public PROCESSING.
-      properties:
-        task_id:
-          type: string
-        status:
-          type: string
-          enum: [PROCESSING]
-      required: [task_id, status]
-    StatusSuccessResponse:
-      type: object
-      description: Returned when ingestion has completed successfully.
-      properties:
-        task_id:
-          type: string
-        status:
-          type: string
-          enum: [SUCCESS]
-        document_id:
-          oneOf:
-            - type: integer
-            - type: string
-        chunk_count:
           type: integer
-          description: Number of chunks embedded and stored for the document.
-      required: [task_id, status]
-    StatusFailureResponse:
-      type: object
-      description: >
-        Returned when ingestion failed. The error message also appears in the
-        structured logs.
-      properties:
         task_id:
           type: string
-        status:
-          type: string
-          enum: [FAILURE]
-        error:
-          type: string
-      required: [task_id, status, error]
-    ChatQueryRequest:
+          format: uuid
+      required:
+      - document_id
+      - message
+      - task_id
+    UploadUnauthorizedResponse:
       type: object
       properties:
-        query:
+        detail:
           type: string
-          description: The user's natural-language question.
-        chat_id:
-          oneOf:
-            - type: integer
-            - type: string
-          description: >
-            Optional. Bonus chat-continuation handle. When provided, prior turns
-            in the conversation are loaded for context. Omitted for a one-shot
-            query.
-      required: [query]
-    ChatQueryResponse:
-      type: object
-      properties:
-        answer:
-          type: string
-          description: >
-            The LLM answer grounded only in the caller's own documents. If no
-            relevant context is retrieved, the answer states that there is not
-            enough information in the user's documents.
-        tokens_consumed:
-          type: integer
-          description: >
-            Token count read verbatim from the OpenRouter response `usage`
-            field. Never estimated. Used to decrement the user's credit balance.
-        chat_id:
-          oneOf:
-            - type: integer
-            - type: string
-          description: Present when chat continuation (bonus) is enabled.
-      required: [answer, tokens_consumed]
-    DocumentListItem:
-      type: object
-      properties:
-        document_id:
-          oneOf:
-            - type: integer
-            - type: string
-        original_name:
-          type: string
-        content_type:
-          type: string
-        size_bytes:
-          type: integer
-        uploaded_at:
-          type: string
-          format: date-time
-      required: [document_id, original_name, uploaded_at]
-paths:
-  /api/register/:
-    post:
-      summary: Register a user
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RegisterRequest'
-            examples:
-              valid:
-                value:
-                  email: user@example.com
-                  password: s3cret-pass
-      responses:
-        '201':
-          description: Registration successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RegisterResponse'
-              examples:
-                created:
-                  value:
-                    message: User registered successfully
-                    user_id: 1
-        '400':
-          description: Validation error (e.g. duplicate email, weak/missing fields)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                duplicate:
-                  value:
-                    error: A user with this email already exists.
-  /api/login/:
-    post:
-      summary: Log in and obtain a JWT
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-            examples:
-              valid:
-                value:
-                  email: user@example.com
-                  password: s3cret-pass
-      responses:
-        '200':
-          description: Login successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LoginResponse'
-              examples:
-                ok:
-                  value:
-                    message: Login successful
-                    token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-        '401':
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                invalid:
-                  value:
-                    error: Invalid email or password.
-  /api/documents/upload/:
-    post:
-      summary: Upload a document for ingestion
-      description: >
-        Accepts only .pdf, .txt, or .md files up to 10 MB. Stores the original
-        on the file volume, creates Document + IngestionJob rows, and dispatches
-        the ingestion task. Returns 202 with the document and task ids.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-              required: [file]
-      responses:
-        '202':
-          description: Upload accepted; ingestion queued
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UploadDocumentResponse'
-              examples:
-                accepted:
-                  value:
-                    message: Document uploaded and queued for processing
-                    document_id: 42
-                    task_id: c7f3e2a1-8b4d-4e6f-9a1c-2d3e4f5a6b7c
-        '400':
-          description: >
-            Invalid file request (unsupported type, missing file, or larger
-            than 10 MB)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                bad_type:
-                  value:
-                    error: Unsupported file type. Allowed types are .pdf, .txt, .md.
-                too_large:
-                  value:
-                    error: File exceeds the maximum allowed size of 10 MB.
-        '401':
-          description: Missing or invalid JWT
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                unauthorized:
-                  value:
-                    error: Authentication credentials were not provided.
-  /api/documents/status/:
-    get:
-      summary: Get ingestion task status
-      description: >
-        Returns the ingestion status for a task owned by the caller. Internal
-        STARTED is normalized to public PROCESSING. Unknown or cross-user
-        task ids return 404.
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: query
-          name: task_id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Ingestion status
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - $ref: '#/components/schemas/StatusProcessingResponse'
-                  - $ref: '#/components/schemas/StatusSuccessResponse'
-                  - $ref: '#/components/schemas/StatusFailureResponse'
-              examples:
-                processing:
-                  value:
-                    task_id: c7f3e2a1-8b4d-4e6f-9a1c-2d3e4f5a6b7c
-                    status: PROCESSING
-                success:
-                  value:
-                    task_id: c7f3e2a1-8b4d-4e6f-9a1c-2d3e4f5a6b7c
-                    status: SUCCESS
-                    document_id: 42
-                    chunk_count: 37
-                failure:
-                  value:
-                    task_id: c7f3e2a1-8b4d-4e6f-9a1c-2d3e4f5a6b7c
-                    status: FAILURE
-                    error: Failed to parse PDF document.
-        '400':
-          description: Missing task_id query parameter
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                missing:
-                  value:
-                    error: Query parameter 'task_id' is required.
-        '401':
-          description: Missing or invalid JWT
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Unknown task or task not owned by the authenticated user
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                not_found:
-                  value:
-                    error: Task not found.
-  /api/chat/query/:
-    post:
-      summary: Ask a question answered from the caller's own documents
-      description: >
-        Embeds the query, retrieves the top 4 cosine-similar chunks from the
-        caller's per-user Chroma collection, builds a bounded prompt, calls
-        OpenRouter, and returns the answer plus tokens_consumed read from the
-        provider usage field. If no relevant context is found, the answer states
-        that there is not enough information in the user's documents. The
-        optional chat_id enables the continuation bonus.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ChatQueryRequest'
-            examples:
-              one_shot:
-                value:
-                  query: What is the refund policy in my contract?
-              continuation:
-                value:
-                  query: And what about international orders?
-                  chat_id: 9
-      responses:
-        '200':
-          description: Answer generated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ChatQueryResponse'
-              examples:
-                answered:
-                  value:
-                    answer: The refund policy allows returns within 30 days of purchase.
-                    tokens_consumed: 312
-                no_context:
-                  value:
-                    answer: >-
-                      There isn't enough information in your documents to answer
-                      that question.
-                    tokens_consumed: 48
-        '400':
-          description: Invalid request (e.g. missing query)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                missing_query:
-                  value:
-                    error: Field 'query' is required.
-        '401':
-          description: Missing or invalid JWT
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '402':
-          description: >
-            Insufficient credit balance to serve the query (Subscription
-            Management / Credit Consumption).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                no_credit:
-                  value:
-                    error: Insufficient credit balance.
-        '404':
-          description: >
-            Referenced chat_id not found or not owned by the authenticated user
-            (continuation bonus only).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/documents/:
-    get:
-      summary: List the caller's documents (optional convenience endpoint)
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: The authenticated user's documents
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/DocumentListItem'
-        '401':
-          description: Missing or invalid JWT
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/documents/{document_id}/:
-    delete:
-      summary: Delete a document and its vectors (optional convenience endpoint)
-      description: >
-        Removes the document row, the stored file, and the document's vectors
-        from the caller's Chroma collection. Cross-user deletion returns 404.
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: document_id
-          required: true
-          schema:
-            oneOf:
-              - type: integer
-              - type: string
-      responses:
-        '204':
-          description: Document deleted
-        '401':
-          description: Missing or invalid JWT
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Document not found or not owned by the authenticated user
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+      required:
+      - detail
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
